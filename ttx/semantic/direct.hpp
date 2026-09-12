@@ -12,13 +12,13 @@ namespace Ttx::Semantic {
 
 // These identities let independently loaded readers and providers agree on
 // Direct's C operation tables without sharing C++ type identities. The payload
-// schemas still establish which representation the returned pointer exposes.
+// descriptors still establish which representation the returned pointer exposes.
 // A successful bind grants that role alone, not another transport inferred from
 // the fact that native code could read the published bytes.
 class Direct {
  public:
   // Binding View declares that the reader accepts a directly published ABI.
-  // Its schema remains the requirement even when no target Storage exists yet.
+  // Its descriptor remains the requirement even when no target Storage exists yet.
   struct View {
     static constexpr Perimortem::System::Uuid contract_id{
       TTX_DIRECT_VIEW_ID_HIGH,

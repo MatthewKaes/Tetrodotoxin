@@ -17,7 +17,7 @@ namespace Ttx::Semantic {
 class Shared {
  public:
   // Binding View permits Flow to hold an acquired representation for the
-  // reader. The schema describes what that held representation must satisfy.
+  // reader. The descriptor describes what that held representation must satisfy.
   struct View {
     static constexpr Perimortem::System::Uuid contract_id{
       TTX_SHARED_VIEW_ID_HIGH,

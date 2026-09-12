@@ -8,22 +8,17 @@
 
 #include "ttx/semantic/binding.h"
 
-// Semantic negotiation needs the supplying owner's bind operation to extract
-// the actual semantic operations. A Semantic query is the thinnest negotiation
-// on top of the TTX flow stack and allows consumer negotiation outside of the
-// TTX graph, allowing it to provide its own method of semantic negotation.
+// Two systems need an agreed entry point before either can ask the other for
+// an interface. A module can return this Query from its entry function, or a
+// native owner can lend it directly. That enclosing agreement supplies the
+// bind thunk and its lifetime, so calling bind does not first require a Flow.
+// Systems can therefore begin cooperating without constructing a TTX graph.
 //
-// This is a critical step to allowing interop between systems loosly embedded
-// in the TTX graph as it allows progressive semantic cooporation.
-//
-// The query surface is extremely light. It only negotiates with the source that
-// it can continue negotiations under a binding contract. That TTX layer is then
-// used to negotiate a binding contract using a UUID using the `bind` contract.
-//
-// If the source agrees to the contract it will `ttx_binding` surface can then
-// be used for further semantic negotiation.
-//
-// (read details in ttx/semantic/binding.h)
+// Each call asks for one UUID contract and returns its bound operations. The
+// consumer can use those operations immediately under the requested contract,
+// including establishing a Flow to acquire other data. There is no additional
+// permission negotiation inside Query. Binding's status and borrowing rules
+// are described in ttx/semantic/binding.h.
 //
 // Actually accessing `source` inside of TTX is undefined behavior as far as
 // Tetrodotoxin is concerned. It can _technically_ be safe but making any
@@ -31,9 +26,9 @@
 // get into trouble since sources allow for dynamic substitution under TTX's
 // semantic simulacra principle.
 //
-// The caller does need to promise it will keep its state and code alive through
-// negotiation and use of the returned bindings. Probing selects operations
-// without materializing their data.
+// The enclosing owner keeps the supplying state and implementation code alive
+// through negotiation and every use of the returned bindings. Copying this
+// Query borrows that agreement without acquiring another lifetime.
 typedef struct ttx_semantic_query {
   const void* source;
   ttx_binding_status (*bind)(

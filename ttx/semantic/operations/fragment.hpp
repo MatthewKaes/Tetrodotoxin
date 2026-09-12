@@ -18,24 +18,18 @@ namespace Ttx::Semantic::Operations {
 // not turn either operation's policy into part of the Data protocol.
 class Fragment {
  public:
-  // The consumer visits a typed result within this call. It is not a provider
-  // completion and neither it nor its state is retained across the C boundary.
+  // Selecting a getter turns the primitive code into a native typed value.
+  // Visiting that value lets the operation write it into its target format
+  // without duplicating the getter switch. The consumer finishes in this call
+  // and its state remains on the caller's side of the C boundary.
   template <typename Consumer>
   static auto read(
       Data::Protocol::Fragment::Access access,
-      const Data::Form::Representation& type,
+      const Data::Form::Representation::Position& type,
       Count position,
       Consumer consume) -> Data::Status {
-    if (type.kind == TTX_SCHEMA_MAPPING) {
-      return access.get_function(position).visit(
-          [&](auto value) {
-            consume(value);
-            return Data::Status::Success;
-          },
-          [](Data::Status status) { return status; });
-    }
-
-    switch (type.data.value.type) {
+    using Value = Data::Form::Schema::Value;
+    switch (type.get_value()) {
 #define READ(code, name)                      \
   case code:                                  \
     return access.get_##name(position).visit( \
@@ -44,17 +38,17 @@ class Fragment {
           return Data::Status::Success;       \
         },                                    \
         [](Data::Status status) { return status; });
-      READ(TTX_SCHEMA_U8, u8)
-      READ(TTX_SCHEMA_U16, u16)
-      READ(TTX_SCHEMA_U32, u32)
-      READ(TTX_SCHEMA_U64, u64)
-      READ(TTX_SCHEMA_S8, s8)
-      READ(TTX_SCHEMA_S16, s16)
-      READ(TTX_SCHEMA_S32, s32)
-      READ(TTX_SCHEMA_S64, s64)
-      READ(TTX_SCHEMA_R32, r32)
-      READ(TTX_SCHEMA_R64, r64)
-      READ(TTX_SCHEMA_POINTER, pointer)
+      READ(Value::U8, u8)
+      READ(Value::U16, u16)
+      READ(Value::U32, u32)
+      READ(Value::U64, u64)
+      READ(Value::S8, s8)
+      READ(Value::S16, s16)
+      READ(Value::S32, s32)
+      READ(Value::S64, s64)
+      READ(Value::R32, r32)
+      READ(Value::R64, r64)
+      READ(Value::Pointer, pointer)
 #undef READ
     default:
       // TODO: Decide whether this template calls an out of line fatal log.
@@ -68,7 +62,7 @@ class Fragment {
   // A getter returns a native value, while the target may use another byte
   // order. Realizing the value here leaves that storage choice with the output
   // operation. Copying its representation as bytes preserves floating point
-  // and callable bits instead of accidentally applying a numeric conversion.
+  // bits instead of accidentally applying a numeric conversion.
   template <typename T>
   static auto put(
       Data::Form::Storage target,
@@ -77,10 +71,10 @@ class Fragment {
     using Perimortem::Core::Data::ByteOrder;
     auto* output = target.get_bytes().get_data() + position.offset;
     const Bool reverse =
-        position.representation->kind == TTX_SCHEMA_VALUE &&
-        position.representation->data.value.byte_order !=
-            (ByteOrder::Native == ByteOrder::Little ? TTX_SCHEMA_LITTLE_ENDIAN
-                                                    : TTX_SCHEMA_BIG_ENDIAN);
+        position.get_byte_order() !=
+            (ByteOrder::Native == ByteOrder::Little
+                 ? Data::Form::Schema::ByteOrder::Little
+                 : Data::Form::Schema::ByteOrder::Big);
     if (!reverse) {
       Perimortem::Core::Data::copy(output, &value, 1);
       return;

@@ -25,7 +25,7 @@ auto ttx_flow_reader(const ttx_representation* required) -> ttx_semantic_query {
   static const Block::View::Operations block = {
     reader_representation,
     [](const void*, ttx_storage target) -> ttx_block_surface {
-      return {target.data, target.representation->extent};
+      return {target.data, target.representation->get_extent()};
     },
   };
 

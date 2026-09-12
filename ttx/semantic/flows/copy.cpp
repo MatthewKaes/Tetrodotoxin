@@ -14,47 +14,35 @@ using namespace Ttx::Data::Form;
 using Ttx::Data::Protocol::Block;
 using Ttx::Data::Protocol::Fragment;
 
-// Fragmented memory access requires us to navigate transfer element by element
-// which is very slow but gives the maximum power to the provider of the data to
-// decide how that data is materialized.
-//
-// All the copy operator does is propagate each element of the representation in
-// order to each side of the API. The operator doesn't even observe the
-// transaction so it can't guarantee a success means any real data was even
-// "stored".
+// Fragment lets the source produce each value when it is observed. Copy owns
+// the other half of that operation: it writes the returned value into the
+// caller's Storage before requesting another. The provider needs no backing
+// record, while the caller obtains a concrete record satisfying the agreed
+// form. Padding has a fixed location but no promised value, so these writes
+// leave it alone.
 static auto copy_fragments(Fragment::Access source, Storage target)
-    -> Copy::Result {
-  Count offset = 0;
-  Representation::Position position;
-  while (ttx_representation_next(
-             &target.get_representation(), offset, &position) !=
-         TTX_DATA_BOUNDS) {
-    const auto status = Operations::Fragment::read(
-        source, *position.representation, position.offset, [&](auto value) {
-          Operations::Fragment::put(target, position, value);
-        });
-    if (status != Status::Success) {
-      return status;
-    }
-
-    offset = position.offset + position.representation->extent;
-  }
-
-  return Status::Success;
+    -> Status {
+  return target.get_representation().visit(
+      [&](Representation::Position position) {
+        return Operations::Fragment::read(
+            source, position, position.offset, [&](auto value) {
+              Operations::Fragment::put(target, position, value);
+            });
+      });
 }
 
-auto Copy::flow(const Flow& flow, Storage target) -> Result {
-  // A new target may have an independent descriptor so while Storage admission
-  // already established capacity we still need a single compatability check
-  // to make sure a bad target slipped.
+auto Copy::flow(const Flow& flow, Storage target) -> Status {
+  // Each call can supply fresh Storage with an independent descriptor. Its
+  // admission already proved capacity and alignment, but it still has to
+  // describe the form this Flow agreed to observe.
   if (!flow.get_representation().compatible(target.get_representation())) {
     return Status::Incompatible;
   }
 
-  // When possible we can just use a memmove when we have direct access to the
-  // representation that matches our wire format.
-  auto memory = [&](const void* source) -> Result {
-    const Count extent = target.get_representation().extent;
+  // The agreed physical form lets Direct and Shared move the entire extent.
+  // memmove also preserves source bytes when the two concrete regions overlap.
+  auto memory = [&](const void* source) -> Status {
+    const Count extent = target.get_representation().get_extent();
     if (extent) {
       memmove(target.get_bytes().get_data(), source, extent);
     }
@@ -64,21 +52,19 @@ auto Copy::flow(const Flow& flow, Storage target) -> Result {
 
   return flow.visit(
       memory, memory,
-      // Block transfers leave it up to the writer to decide how to handle the
-      // memory transfer. It can still choose to use a memmove, but even if it
-      // does we still have the overhead of the commit handshake.
-      [&](Block::View reader, Block::Access writer) -> Result {
+      // Block gives the provider this call's destination surface. The provider
+      // finishes populating it before returning, while other calls can supply
+      // independently owned surfaces through the same retained agreement.
+      [&](Block::View reader, Block::Access writer) -> Status {
         return writer.commit(reader.surface(target));
       },
-      // Fragmented access is such a weak promise that the writer can't even
-      // upgrade the interaction to memmove if it wanted. For copies this should
-      // be the method of last resort as the interaction itself isn't even
-      // required to be "atomic" which can cause artifacts that look like bugs
-      // when the source and destination overlap.
+      // Fragment supplies typed observations. Copy cannot infer permission for
+      // a whole byte transfer from those getters. Successive observations need
+      // not form a snapshot, so overlap can affect the combined result.
       [&](Fragment::Access source) { return copy_fragments(source, target); });
 }
 
-auto ttx_copy(const ttx_flow* flow, ttx_storage target) -> ttx_copy_result {
-  return {static_cast<ttx_data_status>(
-      Copy::flow(*reinterpret_cast<const Flow*>(flow), Storage(target)))};
+auto ttx_copy(const ttx_flow* flow, ttx_storage target) -> ttx_data_status {
+  return static_cast<ttx_data_status>(
+      Copy::flow(*reinterpret_cast<const Flow*>(flow), Storage(target)));
 }

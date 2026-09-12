@@ -3,33 +3,32 @@
 
 #pragma once
 
+#include "perimortem/memory/dynamic/vector.hpp"
+
 #include "ttx/semantic/flow.hpp"
 #include "ttx/semantic/flows/swizzle.h"
 
 namespace Ttx::Semantic::Flows {
 
-// Swizzle applies a separate correspondence policy to an established Flow.
-// The policy can repeat a color channel or rearrange a record while access
-// remains unchanged. The call returns its final result and retains no request,
-// target or callback. Deferred execution belongs to an outer operation policy.
+// A swizzle selects observations from an established Flow. Repeated selections
+// share one observed value, even if a Fragment provider would generate a new
+// answer for another read. Mapping owns that correspondence so execution can
+// use it repeatedly without names, schema searches or temporary allocations.
 class Swizzle {
  public:
-  // Mapping admission asks whether every output can be supplied by its chosen
-  // input. Keeping that proof separate lets an owner use the policy repeatedly
-  // without paying for the same walk each time. Its representations and
-  // coordinate function remain borrowed, immutable and deterministic through
-  // those uses.
+  // Preparation groups destinations by their selected source coordinate and
+  // resolves the source facts in one ordered walk. The temporary name resolver
+  // and lookup map disappear afterward. Only the selected primitive facts and
+  // their output positions remain, in the order each source was first selected.
+  // Representations stay borrowed, while these position arrays belong to
+  // Mapping.
   class Mapping {
    public:
-    static auto create(ttx_swizzle_mapping value)
-        -> Perimortem::Utility::Result<Mapping, Data::Status> {
-      const auto status = ttx_swizzle_mapping_check(value);
-      if (status) {
-        return static_cast<Data::Status>(status);
-      }
+    Mapping(const Mapping&) = delete;
+    Mapping(Mapping&&) = default;
 
-      return Mapping(value);
-    }
+    static auto create(ttx_swizzle_selection selection)
+        -> Perimortem::Utility::Result<Mapping, Data::Status>;
 
     template <typename Resolver>
     static auto create(
@@ -44,41 +43,45 @@ class Swizzle {
            }});
     }
 
-    // A foreign provider or compiler may already establish these facts.
-    // Construction from its carrier borrows that admitted immutable policy.
-    constexpr explicit Mapping(ttx_swizzle_mapping value) : value(value) {}
-
     auto get_input() const -> const Data::Form::Representation& {
-      return *value.input;
+      return input;
     }
-
     auto get_output() const -> const Data::Form::Representation& {
-      return *value.output;
+      return output;
     }
 
-    auto position(Count output) const -> Count {
-      return value.position(value.source, output);
+    auto get_abi() const -> ttx_swizzle_mapping {
+      return {&input, &output, groups.get_data(), groups.get_size()};
     }
-
-    constexpr auto get_abi() const -> ttx_swizzle_mapping { return value; }
 
    private:
-    ttx_swizzle_mapping value;
+    Mapping(
+        const Data::Form::Representation& input,
+        const Data::Form::Representation& output,
+        Count group_count,
+        Count output_count)
+        : input(input),
+          output(output),
+          groups(group_count),
+          outputs(output_count) {}
+
+    const Data::Form::Representation& input;
+    const Data::Form::Representation& output;
+    Perimortem::Memory::Dynamic::Vector<ttx_swizzle_group> groups;
+    Perimortem::Memory::Dynamic::Vector<Data::Form::Representation::Position>
+        outputs;
   };
 
-  // Success supplies the requested observation. Failure reports its cause
-  // without certifying progress, so a consumer cannot rely on the provider's
-  // individual steps as another form of successful projection.
-  using Result = Data::Status;
-
-  // The target follows Mapping's output representation. Overlapping Fragment
-  // reflow has an unspecified combined result unless an outer policy supplies a
-  // stronger observation guarantee. Block requires an explicit input buffer
-  // for projection and is therefore Unsupported by this entry.
+  // The result concerns the whole observation. On failure some destinations
+  // may have changed, but exposing progress would promise a partial projection.
+  //
+  // Mapping's output specifies the target form, including padding locations
+  // whose byte values remain unspecified. Block needs explicit materialization
+  // first. Other protocols reuse their existing agreement without fallback.
   static auto flow(
       const Flow& flow,
-      Mapping mapping,
-      Data::Form::Storage target) -> Result;
+      const Mapping& mapping,
+      Data::Form::Storage target) -> Data::Status;
 };
 
 }  // namespace Ttx::Semantic::Flows

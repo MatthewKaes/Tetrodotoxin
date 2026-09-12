@@ -16,7 +16,7 @@ namespace Ttx::Semantic {
 // nor a block that could be obtained by casting the bound source state.
 class Fragment {
  public:
-  // Binding View accepts separate typed observations in the required schema.
+  // Binding View accepts separate typed observations in the required representation.
   // Any stronger consistency between observations belongs to the reader policy.
   struct View {
     static constexpr Perimortem::System::Uuid contract_id{
@@ -28,7 +28,7 @@ class Fragment {
     using Handle = Data::Protocol::Fragment::View;
   };
 
-  // Binding Access supplies only the typed getters that its schema describes.
+  // Binding Access supplies only the typed getters that its representation describes.
   // A representation assembled by observing them need not exist in the
   // provider.
   struct Access {
