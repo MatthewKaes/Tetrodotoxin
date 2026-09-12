@@ -28,19 +28,15 @@ static constexpr Static::Vector<Code::Type, 1> package_separators = {{
   Code::Type::AddressOp,
 }};
 
-static auto valid(
-    const Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>& reader)
-    -> Bool {
-  return reader.get_location() != Count(-1);
-}
-
 static auto read_bytes(
     Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>& reader,
     View::Bytes& value) -> Bool {
-  U32 size = reader.read_u32();
-  BAIL_IF(!valid(reader));
-  value = reader.read_bytes(size);
-  return valid(reader);
+  auto size = reader.read_u32();
+  BAIL_IF(!size);
+  auto bytes = reader.read_bytes(*size);
+  BAIL_IF(!bytes);
+  value = *bytes;
+  return True;
 }
 
 template <typename Value>
@@ -48,9 +44,7 @@ static auto count_fits(
     U32 count,
     const Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>& reader,
     Count minimum_size) -> Bool {
-  BAIL_IF(
-      !valid(reader) || reader.get_location() > reader.get_size() ||
-      minimum_size == 0);
+  BAIL_IF(reader.get_location() > reader.get_size() || minimum_size == 0);
   Count remaining = reader.get_size() - reader.get_location();
   return Count(count) <= remaining / minimum_size &&
          Count(count) <= Count(-1) / sizeof(Value);
@@ -59,10 +53,10 @@ static auto count_fits(
 static auto read_members(
     Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>& reader,
     Dynamic::Vector<Package::Archive::Member>& members) -> Bool {
-  U32 count = reader.read_u32();
-  BAIL_IF(!count_fits<Package::Archive::Member>(count, reader, 12));
-  members = Dynamic::Vector<Package::Archive::Member>(count);
-  for (U32 index = 0; index < count; index++) {
+  auto count = reader.read_u32();
+  BAIL_IF(!count || !count_fits<Package::Archive::Member>(*count, reader, 12));
+  members = Dynamic::Vector<Package::Archive::Member>(*count);
+  for (U32 index = 0; index < *count; index++) {
     View::Bytes name;
     View::Bytes dialect;
     View::Bytes payload;
@@ -77,10 +71,10 @@ static auto read_members(
 static auto read_resources(
     Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>& reader,
     Dynamic::Vector<Package::Archive::Resource>& resources) -> Bool {
-  U32 count = reader.read_u32();
-  BAIL_IF(!count_fits<Package::Archive::Resource>(count, reader, 8));
-  resources = Dynamic::Vector<Package::Archive::Resource>(count);
-  for (U32 index = 0; index < count; index++) {
+  auto count = reader.read_u32();
+  BAIL_IF(!count || !count_fits<Package::Archive::Resource>(*count, reader, 8));
+  resources = Dynamic::Vector<Package::Archive::Resource>(*count);
+  for (U32 index = 0; index < *count; index++) {
     View::Bytes route;
     View::Bytes value;
     BAIL_IF(!read_bytes(reader, route) || !read_bytes(reader, value));
@@ -92,30 +86,32 @@ static auto read_resources(
 static auto read_imports(
     Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>& reader,
     Dynamic::Vector<Package::Archive::GraphImport>& imports) -> Bool {
-  U32 count = reader.read_u32();
-  BAIL_IF(!count_fits<Package::Archive::GraphImport>(count, reader, 22));
-  imports = Dynamic::Vector<Package::Archive::GraphImport>(count);
-  for (U32 index = 0; index < count; index++) {
-    U8 kind = reader.read_u8();
-    U8 visibility = reader.read_u8();
+  auto count = reader.read_u32();
+  BAIL_IF(
+      !count || !count_fits<Package::Archive::GraphImport>(*count, reader, 22));
+  imports = Dynamic::Vector<Package::Archive::GraphImport>(*count);
+  for (U32 index = 0; index < *count; index++) {
+    auto kind = reader.read_u8();
+    auto visibility = reader.read_u8();
     View::Bytes importer;
     View::Bytes local_name;
     View::Bytes target;
     BAIL_IF(
-        kind > U8(Tetrodotoxin::Language::Import::Kind::Package) ||
-        visibility > U8(Tetrodotoxin::Language::Visibility::Public) ||
+        !kind || !visibility ||
+        *kind > U8(Tetrodotoxin::Language::Import::Kind::Package) ||
+        *visibility > U8(Tetrodotoxin::Language::Visibility::Public) ||
         !read_bytes(reader, importer) || !read_bytes(reader, local_name) ||
         !read_bytes(reader, target));
-    U16 major = reader.read_u16();
-    U16 minor = reader.read_u16();
+    auto major = reader.read_u16();
+    auto minor = reader.read_u16();
     View::Bytes route;
-    BAIL_IF(!read_bytes(reader, route));
+    BAIL_IF(!major || !minor || !read_bytes(reader, route));
     imports.emplace(
         Package::Archive::GraphImport(
             importer, local_name,
-            Tetrodotoxin::Language::Visibility(visibility),
-            Tetrodotoxin::Language::Import::Kind(kind), target,
-            Version(major, minor), route));
+            Tetrodotoxin::Language::Visibility(*visibility),
+            Tetrodotoxin::Language::Import::Kind(*kind), target,
+            Version(*major, *minor), route));
   }
   return True;
 }
@@ -230,18 +226,19 @@ static auto reject(View::Bytes reason)
 auto Package::Archive::Reader::read(Allocator::Arena& arena, View::Bytes input)
     -> Result<Archive, Error> {
   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little> header(input);
-  View::Bytes magic = header.read_bytes(4);
-  U16 selected_format = header.read_u16();
-  U16 flags = header.read_u16();
-  U32 body_size = header.read_u32();
-  if (!valid(header) || magic != "TTXA"_view) {
+  auto magic = header.read_bytes(4);
+  auto selected_format = header.read_u16();
+  auto flags = header.read_u16();
+  auto body_size = header.read_u32();
+  if (!magic || !selected_format || !flags || !body_size ||
+      *magic != "TTXA"_view) {
     return reject("invalid header"_view);
   }
-  if (selected_format != Archive::format) {
+  if (*selected_format != Archive::format) {
     return Error::UnsupportedFormat;
   }
-  if (flags != 0 || header.get_location() != Archive::header_size ||
-      Count(body_size) != input.get_size() - Archive::header_size) {
+  if (*flags != 0 || header.get_location() != Archive::header_size ||
+      Count(*body_size) != input.get_size() - Archive::header_size) {
     return reject("invalid body boundary"_view);
   }
 
@@ -251,13 +248,18 @@ auto Package::Archive::Reader::read(Allocator::Arena& arena, View::Bytes input)
   if (!read_bytes(body, identity)) {
     return reject("invalid identity"_view);
   }
-  Version version(body.read_u16(), body.read_u16());
+  auto major = body.read_u16();
+  auto minor = body.read_u16();
+  if (!major || !minor) {
+    return reject("invalid graph records"_view);
+  }
+
+  Version version(*major, *minor);
   Dynamic::Vector<Package::Archive::Member> members;
   Dynamic::Vector<Package::Archive::Resource> resources;
   Dynamic::Vector<Package::Archive::GraphImport> imports;
-  if (!valid(body) || !read_members(body, members) ||
-      !read_resources(body, resources) || !read_imports(body, imports) ||
-      body.get_location() != body.get_size()) {
+  if (!read_members(body, members) || !read_resources(body, resources) ||
+      !read_imports(body, imports) || body.get_location() != body.get_size()) {
     return reject("invalid graph records"_view);
   }
   if (!Lexicon::validate(Code::Type::Type, identity, package_separators) ||

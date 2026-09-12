@@ -17,6 +17,13 @@ static Harness CoreBinaryReader = {
   .name = "Core::Reader::Binary"_view,
 };
 
+template <typename T>
+static auto expect_read(Option<T> actual, T expected, Test::TestResult& result)
+    -> void {
+  actual.visit(
+      [&] { EXPECT(false); }, [&](T value) { EXPECT_EQ(value, expected); });
+}
+
 PERIMORTEM_UNIT_TEST(CoreBinaryReader, little_unsigned) {
   using Reader = Reader::Binary<Data::ByteOrder::Little>;
   Static::Bytes<15> source(
@@ -27,10 +34,10 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, little_unsigned) {
   );
   Reader reader(source);
 
-  EXPECT_EQ(reader.read_u8(), U8(0xAB));
-  EXPECT_EQ(reader.read_u32(), U32('PERI'));
-  EXPECT_EQ(reader.read_u16(), U16(0x1234));
-  EXPECT_EQ(reader.read_u64(), U64(0x0123456789ABCDEF));
+  expect_read(reader.read_u8(), U8(0xAB), result);
+  expect_read(reader.read_u32(), U32('PERI'), result);
+  expect_read(reader.read_u16(), U16(0x1234), result);
+  expect_read(reader.read_u64(), U64(0x0123456789ABCDEF), result);
   EXPECT_EQ(reader.get_location(), reader.get_size());
 }
 
@@ -43,10 +50,10 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, little_endian_signed) {
       "\x00\x36\x65\xC4\xFF\xFF\xFF\xFF"_view);
   Reader reader(source);
 
-  EXPECT_EQ(reader.read_s8(), S8(-42));
-  EXPECT_EQ(reader.read_s16(), S16(-1000));
-  EXPECT_EQ(reader.read_s32(), S32(-100000));
-  EXPECT_EQ(reader.read_s64(), S64(-1000000000LL));
+  expect_read(reader.read_s8(), S8(-42), result);
+  expect_read(reader.read_s16(), S16(-1000), result);
+  expect_read(reader.read_s32(), S32(-100000), result);
+  expect_read(reader.read_s64(), S64(-1000000000LL), result);
   EXPECT_EQ(reader.get_location(), reader.get_size());
 }
 
@@ -58,8 +65,8 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, little_endian_reals) {
   );
   Reader reader(source);
 
-  EXPECT_EQ(reader.read_r32(), R32(3.0f));
-  EXPECT_EQ(reader.read_r64(), R64(1.5));
+  expect_read(reader.read_r32(), R32(3.0f), result);
+  expect_read(reader.read_r64(), R64(1.5), result);
   EXPECT_EQ(reader.get_location(), reader.get_size());
 }
 
@@ -73,10 +80,10 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, big_endian_unsigned) {
   );
   Reader reader(source);
 
-  EXPECT_EQ(reader.read_u8(), U8(0xAB));
-  EXPECT_EQ(reader.read_u32(), U32('PERI'));
-  EXPECT_EQ(reader.read_u16(), U16(0x1234));
-  EXPECT_EQ(reader.read_u64(), U64(0x0123456789ABCDEF));
+  expect_read(reader.read_u8(), U8(0xAB), result);
+  expect_read(reader.read_u32(), U32('PERI'), result);
+  expect_read(reader.read_u16(), U16(0x1234), result);
+  expect_read(reader.read_u64(), U64(0x0123456789ABCDEF), result);
   EXPECT_EQ(reader.get_location(), reader.get_size());
 }
 
@@ -89,10 +96,10 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, big_endian_signed) {
       "\xFF\xFF\xFF\xFF\xC4\x65\x36\x00"_view);
   Reader reader(source);
 
-  EXPECT_EQ(reader.read_s8(), S8(-42));
-  EXPECT_EQ(reader.read_s16(), S16(-1000));
-  EXPECT_EQ(reader.read_s32(), S32(-100000));
-  EXPECT_EQ(reader.read_s64(), S64(-1000000000LL));
+  expect_read(reader.read_s8(), S8(-42), result);
+  expect_read(reader.read_s16(), S16(-1000), result);
+  expect_read(reader.read_s32(), S32(-100000), result);
+  expect_read(reader.read_s64(), S64(-1000000000LL), result);
   EXPECT_EQ(reader.get_location(), reader.get_size());
 }
 
@@ -104,8 +111,8 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, big_endian_reals) {
   );
   Reader reader(source);
 
-  EXPECT_EQ(reader.read_r32(), R32(3.0f));
-  EXPECT_EQ(reader.read_r64(), R64(1.5));
+  expect_read(reader.read_r32(), R32(3.0f), result);
+  expect_read(reader.read_r64(), R64(1.5), result);
   EXPECT_EQ(reader.get_location(), reader.get_size());
 }
 
@@ -113,34 +120,28 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, raw_bytes) {
   using Reader = Reader::Binary<Data::ByteOrder::Big>;
   Reader reader("Hello, World!"_view);
 
-  EXPECT_TEXT(reader.read_bytes(5), "Hello"_view);
+  expect_read(reader.read_bytes(5), "Hello"_view, result);
   EXPECT_EQ(reader.get_location(), Count(5));
   reader.read_bytes(2);
-  EXPECT_TEXT(reader.read_bytes(5), "World"_view);
-  reader.read_bytes(12);
-  EXPECT_EQ(reader.get_location(), Count(-1));
+  expect_read(reader.read_bytes(5), "World"_view, result);
+  EXPECT_NOT(reader.read_bytes(12));
+  EXPECT_EQ(reader.get_location(), Count(12));
+  expect_read(reader.read_bytes(1), "!"_view, result);
 }
 
 PERIMORTEM_UNIT_TEST(CoreBinaryReader, overflow_read) {
   using Reader = Reader::Binary<Data::ByteOrder::Little>;
   Reader reader("\xAB\xCD"_view);
 
-  // Set the logging level to catch the Debug level error
-  auto current_level = Diagnostics::Log::get_level();
-  Diagnostics::Log::set_level(Diagnostics::Log::Level::Debug);
-  auto scope_attribution = Diagnostics::Log::set_attribution();
+  // A wider read cannot consume part of its scalar. The caller can retry at
+  // the same position with a type that fits the remaining bytes.
+  EXPECT_NOT(reader.read_u32());
+  EXPECT_EQ(reader.get_location(), Count(0));
+  expect_read(reader.read_u8(), U8(0xAB), result);
 
-  // Out of bounds read should return null and set the reader to invalid.
-  EXPECT_EQ(reader.read_u32(), U32(0));
-  EXPECT_EQ(reader.get_location(), Count(-1));
-
-  // Make sure message was logged.
-  constexpr auto error_message =
-      "Binary read over ran buffer at read location 0. source_size=2, read_size=4"_view;
-  EXPECT(Test::error_contains(error_message, Diagnostics::Log::Level::Debug));
-
-  // Restore the error level
-  Diagnostics::Log::set_level(current_level);
+  EXPECT_NOT(reader.read_u16());
+  EXPECT_EQ(reader.get_location(), Count(1));
+  expect_read(reader.read_u8(), U8(0xCD), result);
 }
 
 PERIMORTEM_UNIT_TEST(CoreBinaryReader, set_location) {
@@ -148,11 +149,11 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, set_location) {
   Static::Bytes<6> source("\x0A\x00\x14\x00\x1E\x00"_view);
   Reader reader(source);
 
-  EXPECT_EQ(reader.read_u16(), U16(0x0A));
+  expect_read(reader.read_u16(), U16(0x0A), result);
 
   // Read from an arbitrary byte offset. Binary readers do not realign.
   reader.set_location(1);
-  EXPECT_EQ(reader.read_u16(), U16(0x1400));
+  expect_read(reader.read_u16(), U16(0x1400), result);
 }
 
 PERIMORTEM_UNIT_TEST(CoreBinaryReader, invalid_pointer) {
@@ -161,7 +162,7 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, invalid_pointer) {
 
   reader.set_location(Count(-1));
   EXPECT_EQ(reader.get_location(), Count(-1));
-  EXPECT_EQ(reader.read_u16(), U16());
+  EXPECT_NOT(reader.read_u16());
   EXPECT_EQ(reader.get_location(), Count(-1));
 }
 
@@ -170,13 +171,59 @@ PERIMORTEM_UNIT_TEST(CoreBinaryReader, multiple_readers) {
   Static::Bytes<6> source("\x01\x00\x02\x00\x03\x00"_view);
   Reader readers[] = {Reader(source), Reader(source)};
 
-  EXPECT_EQ(readers[0].read_u16(), readers[1].read_u16());
+  expect_read(readers[0].read_u16(), U16(1), result);
+  expect_read(readers[1].read_u16(), U16(1), result);
   EXPECT_EQ(readers[0].get_location(), Count(2));
   EXPECT_EQ(readers[1].get_location(), Count(2));
 
-  EXPECT_EQ(readers[0].read_u16(), U16(0x02));
+  expect_read(readers[0].read_u16(), U16(0x02), result);
   EXPECT_EQ(readers[0].get_location(), Count(4));
   EXPECT_EQ(readers[1].get_location(), Count(2));
+}
+
+// Zero and an empty view are answers, including an empty view at the end of
+// input. Absence means the requested bytes were unavailable. Exercise this
+// distinction during constant evaluation as well as through the runtime API.
+static constexpr auto optional_reads() -> Bool {
+  const U8 bytes[] = {0, 0, 0, 0};
+  auto reader = Reader::Binary<Data::ByteOrder::Little>(View::Bytes(bytes));
+  const auto zero = reader.read_u32();
+  const auto empty = reader.read_bytes(0);
+  if (!zero || *zero != 0 || !empty || !empty->is_empty()) {
+    return False;
+  }
+
+  if (reader.read_u8() || reader.get_location() != sizeof(bytes)) {
+    return False;
+  }
+
+  const auto retry = reader.read_bytes(0);
+  if (!retry || !retry->is_empty()) {
+    return False;
+  }
+
+  reader.reset();
+  const auto restored = reader.read_u32();
+  return restored && *restored == 0;
+}
+
+static_assert(optional_reads());
+
+PERIMORTEM_UNIT_TEST(CoreBinaryReader, optional_values) {
+  EXPECT(optional_reads());
+
+  auto reader = Reader::Binary<Data::ByteOrder::Little>(View::Bytes());
+  EXPECT_NOT(reader.read_u8());
+  EXPECT_NOT(reader.read_u16());
+  EXPECT_NOT(reader.read_u32());
+  EXPECT_NOT(reader.read_u64());
+  EXPECT_NOT(reader.read_s8());
+  EXPECT_NOT(reader.read_s16());
+  EXPECT_NOT(reader.read_s32());
+  EXPECT_NOT(reader.read_s64());
+  EXPECT_NOT(reader.read_r32());
+  EXPECT_NOT(reader.read_r64());
+  EXPECT_EQ(reader.get_location(), Count(0));
 }
 
 static Harness CoreBinaryWriter = {

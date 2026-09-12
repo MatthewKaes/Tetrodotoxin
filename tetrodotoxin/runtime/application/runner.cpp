@@ -10,9 +10,9 @@
 #include "perimortem/memory/dynamic/vector.hpp"
 
 #include "perimortem/system/input.hpp"
-#include "perimortem/system/window.hpp"
 
 #include "perimortem/abi/system/input.hpp"
+#include "perimortem/platform/window.hpp"
 #include "perimortem/vulkan/pipelines.hpp"
 #include "perimortem/vulkan/renderer.hpp"
 #include "tetrodotoxin/graphics/runtime/compiled_children_2d.hpp"
@@ -33,12 +33,13 @@ auto Runtime::Application::Runner::run(const Product& product) -> int {
     return 1;
   }
 
-  System::Window window(
+  Platform::Window window(
       product.width, product.height,
       reinterpret_cast<const char*>(product.title));
-  System::Window::EventStatus initial_window_status = window.get_event_status();
-  if (initial_window_status != System::Window::EventStatus::Ready) {
-    if (initial_window_status == System::Window::EventStatus::Failed) {
+  Platform::Window::EventStatus initial_window_status =
+      window.get_event_status();
+  if (initial_window_status != Platform::Window::EventStatus::Ready) {
+    if (initial_window_status == Platform::Window::EventStatus::Failed) {
       Core::Diagnostics::Log::error("Application window setup failed."_view);
       return 1;
     }
@@ -83,9 +84,9 @@ auto Runtime::Application::Runner::run(const Product& product) -> int {
   Core::Time previous = Core::Time::now();
   Bool successful = True;
   while (session.is_running()) {
-    System::Window::EventStatus event_status = window.poll_events();
-    if (event_status != System::Window::EventStatus::Ready) {
-      if (event_status == System::Window::EventStatus::Failed) {
+    Platform::Window::EventStatus event_status = window.poll_events();
+    if (event_status != Platform::Window::EventStatus::Ready) {
+      if (event_status == Platform::Window::EventStatus::Failed) {
         Core::Diagnostics::Log::error(
             "Application window event polling failed."_view);
         successful = False;

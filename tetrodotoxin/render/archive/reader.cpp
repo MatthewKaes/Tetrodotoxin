@@ -40,10 +40,11 @@ auto Render::Archive::Reader::open(View::Bytes payload) -> Option<Reader> {
   BAIL_IF(payload.get_size() < 8);
   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little> reader(
       payload.slice(0, 8));
-  View::Bytes magic = reader.read_bytes(4);
-  U16 version = reader.read_u16();
-  U16 flags = reader.read_u16();
-  BAIL_IF(magic != "TTXR"_view || version != 2 || flags != 0);
+  auto magic = reader.read_bytes(4);
+  auto version = reader.read_u16();
+  auto flags = reader.read_u16();
+  BAIL_IF(!magic || !version || !flags);
+  BAIL_IF(*magic != "TTXR"_view || *version != 2 || *flags != 0);
   return Reader(payload.slice(8));
 }
 
@@ -83,63 +84,48 @@ auto Render::Archive::Reader::read_record() -> Option<Record> {
   auto header = take(8);
   BAIL_IF(!header);
   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little> reader(*header);
-  U16 tag = reader.read_u16();
-  U16 flags = reader.read_u16();
-  U32 size = reader.read_u32();
-  BAIL_IF(flags != 0);
-  auto selected = take(size);
+  auto tag = reader.read_u16();
+  auto flags = reader.read_u16();
+  auto size = reader.read_u32();
+  BAIL_IF(!tag || !flags || !size || *flags != 0);
+  auto selected = take(*size);
   BAIL_IF(!selected);
-  return Record(tag, *selected);
+  return Record(*tag, *selected);
 }
 
 auto Render::Archive::Reader::read_u8() -> Option<U8> {
   auto selected = take(sizeof(U8));
-  return selected
-             ? Option<U8>(
-                   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(
-                       *selected)
-                       .read_u8())
-             : Option<U8>();
+  BAIL_IF(!selected);
+  return Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(*selected)
+      .read_u8();
 }
 
 auto Render::Archive::Reader::read_u32() -> Option<U32> {
   auto selected = take(sizeof(U32));
-  return selected
-             ? Option<U32>(
-                   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(
-                       *selected)
-                       .read_u32())
-             : Option<U32>();
+  BAIL_IF(!selected);
+  return Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(*selected)
+      .read_u32();
 }
 
 auto Render::Archive::Reader::read_u64() -> Option<U64> {
   auto selected = take(sizeof(U64));
-  return selected
-             ? Option<U64>(
-                   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(
-                       *selected)
-                       .read_u64())
-             : Option<U64>();
+  BAIL_IF(!selected);
+  return Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(*selected)
+      .read_u64();
 }
 
 auto Render::Archive::Reader::read_s64() -> Option<S64> {
   auto selected = take(sizeof(S64));
-  return selected
-             ? Option<S64>(
-                   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(
-                       *selected)
-                       .read_s64())
-             : Option<S64>();
+  BAIL_IF(!selected);
+  return Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(*selected)
+      .read_s64();
 }
 
 auto Render::Archive::Reader::read_r64() -> Option<R64> {
   auto selected = take(sizeof(R64));
-  return selected
-             ? Option<R64>(
-                   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(
-                       *selected)
-                       .read_r64())
-             : Option<R64>();
+  BAIL_IF(!selected);
+  return Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(*selected)
+      .read_r64();
 }
 
 auto Render::Archive::Reader::read_bytes() -> Option<View::Bytes> {

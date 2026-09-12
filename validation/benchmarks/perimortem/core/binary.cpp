@@ -37,7 +37,7 @@ PERIMORTEM_BENCHMARK(BinaryBench, binary_read_32) {
   Reader::Binary<Data::ByteOrder::Little> reader(io_buffer.get_view());
   U32 accumulator = 0;
   while (reader.get_location() < io_buffer.get_size() - 64) {
-    accumulator ^= reader.read_u32();
+    reader.read_u32().visit([] {}, [&](U32 value) { accumulator ^= value; });
   }
 
   Benchmark::prevent_optimization(accumulator);
@@ -47,7 +47,7 @@ PERIMORTEM_BENCHMARK(BinaryBench, binary_read_64) {
   Reader::Binary<Data::ByteOrder::Little> reader(io_buffer.get_view());
   U64 accumulator = 0;
   while (reader.get_location() < io_buffer.get_size() - 64) {
-    accumulator ^= reader.read_u64();
+    reader.read_u64().visit([] {}, [&](U64 value) { accumulator ^= value; });
   }
 
   Benchmark::prevent_optimization(accumulator);
@@ -57,8 +57,8 @@ PERIMORTEM_BENCHMARK(BinaryBench, binary_read_view) {
   Reader::Binary<Data::ByteOrder::Little> reader(io_buffer.get_view());
   Count accumulator = 0;
   while (reader.get_location() < io_buffer.get_size() - 64) {
-    auto chunk = reader.read_bytes(16);
-    accumulator ^= chunk.get_size();
+    reader.read_bytes(16).visit(
+        [] {}, [&](View::Bytes chunk) { accumulator ^= chunk.get_size(); });
   }
 
   Benchmark::prevent_optimization(accumulator);

@@ -63,44 +63,47 @@ static auto checksum_worker_payload(View::Bytes payload_bytes) -> U64 {
 
 static auto read_large_payload_job(View::Bytes job_data) -> void {
   Reader::Binary<Data::ByteOrder::Native> reader(job_data);
-  const U64 result_address = reader.read_u64();
-  const View::Bytes payload_bytes =
-      reader.read_bytes(large_worker_payload_size);
-  if (result_address == 0) {
+  const auto result_address = reader.read_u64();
+  const auto payload_bytes = reader.read_bytes(large_worker_payload_size);
+  if (!result_address || !payload_bytes || *result_address == 0) {
     return;
   }
 
-  auto* worker_result = reinterpret_cast<WorkerPayloadResult*>(result_address);
-  worker_result->byte_count = payload_bytes.get_size();
-  worker_result->checksum = checksum_worker_payload(payload_bytes);
+  auto* worker_result = reinterpret_cast<WorkerPayloadResult*>(*result_address);
+  worker_result->byte_count = payload_bytes->get_size();
+  worker_result->checksum = checksum_worker_payload(*payload_bytes);
   worker_result->read_successfully = reader.get_location() == reader.get_size();
 }
 
 static auto read_thread_name_job(View::Bytes job_data) -> void {
   Reader::Binary<Data::ByteOrder::Native> reader(job_data);
-  const U64 result_address = reader.read_u64();
-  const U64 expected_name_size = reader.read_u64();
-  const View::Bytes expected_name = reader.read_bytes(expected_name_size);
-  if (result_address == 0) {
+  const auto result_address = reader.read_u64();
+  const auto expected_name_size = reader.read_u64();
+  if (!result_address || !expected_name_size || *result_address == 0) {
     return;
   }
 
-  auto* worker_result = reinterpret_cast<WorkerNameResult*>(result_address);
+  const auto expected_name = reader.read_bytes(*expected_name_size);
+  if (!expected_name) {
+    return;
+  }
+
+  auto* worker_result = reinterpret_cast<WorkerNameResult*>(*result_address);
   const View::Bytes actual_name = Thread::Worker::get_thread_name();
   worker_result->name_size = actual_name.get_size();
   worker_result->checksum = checksum_worker_payload(actual_name);
-  worker_result->matches_expected = actual_name == expected_name;
+  worker_result->matches_expected = actual_name == *expected_name;
   worker_result->read_successfully = reader.get_location() == reader.get_size();
 }
 
 static auto hold_worker_job(View::Bytes job_data) -> void {
   Reader::Binary<Data::ByteOrder::Native> reader(job_data);
-  const U64 result_address = reader.read_u64();
-  if (result_address == 0) {
+  const auto result_address = reader.read_u64();
+  if (!result_address || *result_address == 0) {
     return;
   }
 
-  auto* worker_result = reinterpret_cast<WorkerCountResult*>(result_address);
+  auto* worker_result = reinterpret_cast<WorkerCountResult*>(*result_address);
   worker_result->active_worker_count = Thread::Worker::get_worker_count();
   worker_result->thread_id = Thread::Worker::get_thread_id();
   worker_result->read_successfully = reader.get_location() == reader.get_size();

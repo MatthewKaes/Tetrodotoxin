@@ -22,10 +22,11 @@ auto Scene::Archive::Reader::open(View::Bytes payload) -> Option<Reader> {
   BAIL_IF(payload.get_size() < 8);
   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little> reader(
       payload.slice(0, 8));
-  View::Bytes magic = reader.read_bytes(4);
-  U16 version = reader.read_u16();
-  U16 flags = reader.read_u16();
-  BAIL_IF(magic != "TTSC"_view || version != 3 || flags != 0);
+  auto magic = reader.read_bytes(4);
+  auto version = reader.read_u16();
+  auto flags = reader.read_u16();
+  BAIL_IF(!magic || !version || !flags);
+  BAIL_IF(*magic != "TTSC"_view || *version != 3 || *flags != 0);
   return Reader(payload.slice(8));
 }
 
@@ -49,22 +50,16 @@ auto Scene::Archive::Reader::take(Count size) -> Option<View::Bytes> {
 
 auto Scene::Archive::Reader::read_u8() -> Option<U8> {
   auto selected = take(sizeof(U8));
-  return selected
-             ? Option<U8>(
-                   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(
-                       *selected)
-                       .read_u8())
-             : Option<U8>();
+  BAIL_IF(!selected);
+  return Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(*selected)
+      .read_u8();
 }
 
 auto Scene::Archive::Reader::read_u32() -> Option<U32> {
   auto selected = take(sizeof(U32));
-  return selected
-             ? Option<U32>(
-                   Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(
-                       *selected)
-                       .read_u32())
-             : Option<U32>();
+  BAIL_IF(!selected);
+  return Perimortem::Core::Reader::Binary<Data::ByteOrder::Little>(*selected)
+      .read_u32();
 }
 
 auto Scene::Archive::Reader::read_bytes() -> Option<View::Bytes> {

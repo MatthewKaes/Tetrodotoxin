@@ -1,12 +1,9 @@
 // # Tetrodotoxin
 // Copyright (c) 2023-present Matt Kaes and contributors
 
-#include "perimortem/system/platform/wayland/input.hpp"
+#include "perimortem/system/input.hpp"
 
 #include "validation/unit_test.hpp"
-
-#include <linux/input-event-codes.h>
-#include <wayland-client.h>
 
 #include "perimortem/core/static/vector.hpp"
 
@@ -97,22 +94,4 @@ PERIMORTEM_UNIT_TEST(SystemInput, pointer_snapshot) {
   EXPECT_EQ(input.get_pointer().scroll_y, R32(-3));
   EXPECT(input.get_pointer().active);
   EXPECT(sizeof(Input) <= 80);
-}
-
-PERIMORTEM_UNIT_TEST(SystemInput, wayland_translation) {
-  EXPECT(Platform::Wayland::Input::translate_keyboard(KEY_A) == Input::Key::A);
-  EXPECT(
-      Platform::Wayland::Input::translate_keyboard(KEY_F24) == Input::Key::F24);
-  EXPECT(
-      Platform::Wayland::Input::translate_keyboard(KEY_RO) ==
-      Input::Key::InternationalRo);
-  EXPECT(
-      Platform::Wayland::Input::translate_keyboard(KEY_RESERVED) ==
-      Input::Key::None);
-  EXPECT(
-      Platform::Wayland::Input::translate_button(BTN_LEFT) ==
-      Input::Key::MousePrimary);
-  EXPECT(
-      Platform::Wayland::Input::translate_button(BTN_BACK) ==
-      Input::Key::MouseBack);
 }

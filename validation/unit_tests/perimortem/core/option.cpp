@@ -16,6 +16,20 @@ static Harness CoreOption = {
   .name = "Core::Option"_view,
 };
 
+// Presence is useful in conditions, but it cannot stand in for the selected
+// integer. Otherwise assigning an unread Option can quietly store one instead
+// of the value its caller meant to extract.
+static_assert(!__is_convertible_to(Option<U64>, U64));
+static_assert(!__is_convertible_to(Option<U64&>, U64));
+static_assert(requires(Option<U64> value) { value ? true : false; });
+static_assert(requires(Option<U64&> value) { value ? true : false; });
+static_assert(Bool(Option<U64>(U64(0))) == True);
+static_assert(Bool(Option<U64>()) == False);
+static_assert([] {
+  U64 value = 0;
+  return Bool(Option<U64&>(value)) == True && Bool(Option<U64&>()) == False;
+}());
+
 class BorrowedBase {};
 class BorrowedDerived final : public BorrowedBase {};
 

@@ -40,14 +40,12 @@ static auto write_sized_bytes(LittleWriter& writer, Core::View::Bytes value)
 
 static auto read_sized_bytes(LittleReader& reader)
     -> Core::Option<Core::View::Bytes> {
-  U32 size = reader.read_u32();
-  if (reader.get_location() == Count(-1)) {
+  auto size = reader.read_u32();
+  if (!size) {
     return {};
   }
-  Core::View::Bytes value = reader.read_bytes(size);
-  return reader.get_location() == Count(-1)
-             ? Core::Option<Core::View::Bytes>()
-             : Core::Option<Core::View::Bytes>(value);
+
+  return reader.read_bytes(*size);
 }
 
 auto Linker::Manifest::write(const Manifest& manifest)
@@ -121,39 +119,39 @@ auto Linker::Manifest::read(
 
   LittleReader reader(bytes.slice(manifest_magic.get_size()));
   auto identity = read_sized_bytes(reader);
-  U16 major = reader.read_u16();
-  U16 minor = reader.read_u16();
+  auto major = reader.read_u16();
+  auto minor = reader.read_u16();
   auto artifact = read_sized_bytes(reader);
   auto target = read_sized_bytes(reader);
-  U64 fingerprint = reader.read_u64();
-  U32 count = reader.read_u32();
-  if (!identity || identity->is_empty() || (major == 0 && minor == 0) ||
-      !artifact || artifact->is_empty() || !target || target->is_empty() ||
-      reader.get_location() == Count(-1) ||
-      Count(count) > (reader.get_size() - reader.get_location()) /
-                         (sizeof(U8) + sizeof(U32) * 3)) {
+  auto fingerprint = reader.read_u64();
+  auto count = reader.read_u32();
+  if (!major || !minor || !fingerprint || !count || !identity ||
+      identity->is_empty() || (*major == 0 && *minor == 0) || !artifact ||
+      artifact->is_empty() || !target || target->is_empty() ||
+      Count(*count) > (reader.get_size() - reader.get_location()) /
+                          (sizeof(U8) + sizeof(U32) * 3)) {
     return Error::InvalidFormat;
   }
 
   Memory::Managed::Vector<Linker::Import> imports(arena);
-  for (U32 index = 0; index < count; index++) {
-    U8 kind = reader.read_u8();
+  for (U32 index = 0; index < *count; index++) {
+    auto kind = reader.read_u8();
     auto abi = read_sized_bytes(reader);
     auto symbol = read_sized_bytes(reader);
     auto provider = read_sized_bytes(reader);
-    if (kind > U8(Linker::Import::Kind::WritableState) || !abi ||
+    if (!kind || *kind > U8(Linker::Import::Kind::WritableState) || !abi ||
         abi->is_empty() || !symbol || symbol->is_empty() || !provider ||
         provider->is_empty()) {
       return Error::InvalidFormat;
     }
     imports.insert(
-        Linker::Import(Linker::Import::Kind(kind), *abi, *symbol, *provider));
+        Linker::Import(Linker::Import::Kind(*kind), *abi, *symbol, *provider));
   }
   if (reader.get_location() != reader.get_size()) {
     return Error::InvalidFormat;
   }
 
   return Manifest(
-      *identity, System::Version(major, minor), *artifact, *target,
-      Linker::Fingerprint(fingerprint), imports.get_view());
+      *identity, System::Version(*major, *minor), *artifact, *target,
+      Linker::Fingerprint(*fingerprint), imports.get_view());
 }
