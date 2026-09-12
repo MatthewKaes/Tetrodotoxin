@@ -35,8 +35,9 @@ class Direct {
     ttx_direct_view value;
   };
 
-  // Access lends the agreed representation itself. The publication keeps the
-  // pointer valid, so consuming it requires no acquire or release operation.
+  // Access lends the payload pointer as well as the descriptor that explains
+  // its format. The publication keeps those bytes valid for its readers, so
+  // using them requires no acquire or release operation.
   class Access {
    public:
     using Operations = ttx_direct_access_operations;

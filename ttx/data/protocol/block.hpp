@@ -9,8 +9,8 @@
 
 namespace Ttx::Data::Protocol {
 
-// A provider can produce a complete representation without lending its own
-// storage. Block lets the reader supply that storage for a synchronous call.
+// A provider can produce a complete record without lending its own storage.
+// Block lets the reader supply that storage for a synchronous call.
 // The returned status determines whether the whole result is available, and
 // the provider has finished using the surface before control returns.
 class Block {
@@ -41,7 +41,7 @@ class Block {
     ttx_block_view value;
   };
 
-  // Access commits a complete representation into the supplied surface. It
+  // Access commits a complete record into the supplied surface. It
   // exposes no provider storage and retains no operation borrow after
   // returning.
   class Access {

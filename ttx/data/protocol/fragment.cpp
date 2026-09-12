@@ -73,11 +73,6 @@ auto Fragment::Access::get_r64(Count position) const
   return read(value.operations->get_r64, value.source, position);
 }
 
-auto Fragment::Access::get_function(Count position) const
-    -> Perimortem::Utility::Result<Fragment::Function, Status> {
-  return read(value.operations->get_function, value.source, position);
-}
-
 auto Fragment::Access::get_pointer(Count position) const
     -> Perimortem::Utility::Result<void*, Status> {
   return read(value.operations->get_pointer, value.source, position);

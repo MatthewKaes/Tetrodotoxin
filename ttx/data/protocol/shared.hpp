@@ -8,9 +8,10 @@
 
 namespace Ttx::Data::Protocol {
 
-// A provider may need to hold a resource before it can lend a representation.
-// Shared carries that lifetime with the pointer, so the reader can keep using
-// the same representation until it releases the agreement.
+// A provider may need to hold a resource before it can lend its data. Shared
+// carries that lifetime with the payload pointer, so several operations can
+// use the same bytes without reacquiring the resource. The descriptor explains
+// their format, while the acquired lifetime keeps the payload available.
 class Shared {
  public:
   // A successful acquisition transfers one release obligation with its data.
@@ -72,8 +73,8 @@ class Shared {
     ttx_shared_view value;
   };
 
-  // Access supplies the representation together with its lifetime agreement.
-  // Successful acquisition returns a ready view with its release obligation.
+  // Access describes the payload before acquisition. Once the reader agrees
+  // to that form, acquisition supplies its data pointer and release obligation.
   class Access {
    public:
     using Operations = ttx_shared_access_operations;

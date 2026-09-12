@@ -13,9 +13,9 @@
 //
 // This carrier borrows both the representation and the storage. Copying it
 // neither allocates another buffer nor retains its owner. The owner keeps
-// them alive
-// through every operation using the storage view. A deferred execution policy
-// must arrange that longer lifetime before handing the view to a later call.
+// them alive through every operation using the storage view. A deferred
+// execution policy must arrange that longer lifetime before handing the view
+// to a later call.
 typedef struct ttx_storage {
   const ttx_representation* representation;
   U8* data;

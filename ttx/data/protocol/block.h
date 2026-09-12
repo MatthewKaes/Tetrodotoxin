@@ -6,12 +6,12 @@
 
 #include "ttx/data/form/storage.h"
 
-// A provider may be able to produce an entire representation without keeping
+// A provider may be able to produce an entire record without keeping
 // a pointer that it can lend. Block lets the reader supply the storage instead.
 // View obtains a surface from the operation's target Storage, then Access
-// commits the agreed representation into that surface. Each operation supplies
-// its own surface so separate calls do not replace a destination stored on the
-// provider.
+// commits data matching the agreed descriptor into that surface. Each operation
+// supplies its own surface so separate calls do not replace a destination
+// stored on the provider.
 //
 // Commit finishes before returning. Success publishes the complete result.
 // Failure supplies no readable result, even if the provider touched bytes while

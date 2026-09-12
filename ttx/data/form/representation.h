@@ -12,161 +12,97 @@
 #include "ttx/data/status.hpp"
 #endif
 
-#define TTX_FORM_PRIMITIVE ((U8)0)
-#define TTX_FORM_RANGE ((U8)1)
-#define TTX_FORM_MAPPING ((U8)2)
-#define TTX_FORM_INTERVAL ((U8)0)
-#define TTX_FORM_REPEAT ((U8)1)
-#define TTX_FORM_HEADER ((U8)2)
-
-// Type is an inline description, not a separately allocated object. Primitive
-// runs carry their byte stride. A Range refers to a prepared pattern by index,
-// and Mapping refers to its two signature forms. All indices belong to the
-// same publication, so moving the two arrays never requires pointer fixups.
-typedef struct ttx_representation_type {
-  U8 kind;
-  U8 value;
+// Navigation returns a primitive occurrence by value. Its byte coordinates
+// belong to the containing object, while type and byte order describe the
+// observation at that coordinate. No pointer to a reconstructed child object
+// needs to survive the lookup.
+typedef struct ttx_representation_position {
+  Count offset;
+  ttx_schema_value type;
   U8 byte_order;
-  union {
-    Count stride;
-    struct { Count form; Count stride; } range;
-    struct { Count input; Count output; } mapping;
-  } data;
 #ifdef __cplusplus
-  enum class Kind : U8 {
-    Primitive = TTX_FORM_PRIMITIVE,
-    Range = TTX_FORM_RANGE,
-    Mapping = TTX_FORM_MAPPING,
-  };
   using Value = ttx_schema::Value;
   using ByteOrder = ttx_schema::ByteOrder;
-  constexpr ttx_representation_type() : kind(TTX_FORM_PRIMITIVE), value(0), byte_order(0), data() {}
-  constexpr auto get_kind() const -> Kind { return static_cast<Kind>(kind); }
-  constexpr auto get_value() const -> Value { return static_cast<Value>(value); }
-  constexpr auto get_byte_order() const -> ByteOrder { return static_cast<ByteOrder>(byte_order); }
-  constexpr auto get_extent() const -> Count;
-#endif
-} ttx_representation_type;
 
-// Each form's transfer entries are contiguous and ordered by byte offset.
-// count is the cumulative primitive count through this entry. Subtracting the
-// preceding count gives this run's length, while a binary search can locate a
-// logical position without storing both its start and length in every entry.
-typedef struct ttx_representation_element {
-  ttx_representation_type type;
-  Count offset;
-  Count count;
-#ifdef __cplusplus
-  constexpr ttx_representation_element(
-      ttx_representation_type type = ttx_representation_type(),
-      Count offset = 0, Count count = 0)
-      : type(type), offset(offset), count(count) {}
-#endif
-} ttx_representation_element;
-
-// A publication has one metadata array. Interval and Repeat records describe
-// composite boundaries in logical primitive coordinates. Form headers describe
-// slices of the two arrays and their enclosing byte geometry. A header is not
-// visited as a boundary, and each form's boundary slice contains only Interval
-// and Repeat records. Repeated patterns and callable signatures reuse headers
-// by index rather than owning further arrays or Representation objects.
-typedef struct ttx_representation_composite {
-  U8 kind;
-  union {
-    struct { Count first; Count end; Count repeats; Count stride; Count count; } interval;
-    struct { Count form; Count first; Count repeats; Count stride; Count count; U8 root; } repeat;
-    struct { Count extent; Count alignment; Count elements_first; Count elements_end;
-             Count composites_first; Count composites_end; } form;
-  } data;
-#ifdef __cplusplus
-  enum class Kind : U8 { Interval = TTX_FORM_INTERVAL, Repeat = TTX_FORM_REPEAT, Form = TTX_FORM_HEADER };
-  constexpr ttx_representation_composite(Kind kind = Kind::Interval)
-      : kind(static_cast<U8>(kind)), data() {}
-  constexpr auto get_kind() const -> Kind { return static_cast<Kind>(kind); }
-  constexpr auto get_count() const -> Count {
-    return get_kind() == Kind::Interval ? data.interval.count : data.repeat.count;
-  }
-#endif
-} ttx_representation_composite;
-
-struct ttx_representation;
-
-// A primitive answer borrows its inline Type and the publication that gives
-// meaning to any signature indices. Coordinates describe the selected instance,
-// independently of the record used to compress its repetitions.
-typedef struct ttx_representation_position {
-  const struct ttx_representation* owner;
-  const ttx_representation_type* type;
-  Count offset;
-  Count index;
-#ifdef __cplusplus
   constexpr ttx_representation_position(
-      const ttx_representation* owner = nullptr,
-      const ttx_representation_type* type = nullptr,
-      Count offset = 0, Count index = 0)
-      : owner(owner), type(type), offset(offset), index(index) {}
-  constexpr auto compatible(const ttx_representation_position& other) const -> Bool;
+      Count offset = 0, Value type = Value::U8,
+      ByteOrder byte_order = ByteOrder::Little)
+      : offset(offset), type(static_cast<U8>(type)),
+        byte_order(static_cast<U8>(byte_order)) {}
+
+  constexpr auto get_value() const -> Value { return static_cast<Value>(type); }
+  constexpr auto get_byte_order() const -> ByteOrder {
+    return static_cast<ByteOrder>(byte_order);
+  }
+  constexpr auto get_extent() const -> Count;
+  constexpr auto compatible(const ttx_representation_position& other) const -> Bool {
+    return type == other.type && byte_order == other.byte_order;
+  }
 #endif
 } ttx_representation_position;
 
-// Representation borrows exactly two linear arrays and selects a form header.
-// Scalars, repetitions, boundaries and signature forms are records in those
-// arrays. There are no per element owners or separately allocated subpatterns.
-// The output owner retains both buffers, while source Schemas can disappear
-// after compilation. The whole form interval is implicit for every form.
+// A Representation borrows a canonical descriptor buffer. Compilation has
+// already established its geometry, normalization and reference invariants.
+// An independent provider can publish the same format without using our
+// compiler, provided it establishes those same invariants before exposing it.
+//
+// The owner retains the bytes for every consumer of this view. Schema and
+// compiler storage can disappear independently. Relocating the bytes needs no
+// reference fixups because every child reference is an absolute block index.
 typedef struct ttx_representation {
-  const ttx_representation_element* elements;
-  const ttx_representation_composite* composites;
-  Count form;
+  const U8* data;
+  Count size;
 #ifdef __cplusplus
-  using Type = ttx_representation_type;
-  using Element = ttx_representation_element;
-  using Composite = ttx_representation_composite;
   using Position = ttx_representation_position;
   using Value = ttx_schema::Value;
   using ByteOrder = ttx_schema::ByteOrder;
-  constexpr ttx_representation(const Element* elements, const Composite* composites, Count form)
-      : elements(elements), composites(composites), form(form) {}
-  constexpr auto get_extent() const -> Count { return composites[form].data.form.extent; }
-  constexpr auto get_alignment() const -> Count { return composites[form].data.form.alignment; }
-  constexpr auto get_elements() const -> Perimortem::Core::View::Vector<Element> {
-    const auto& header = composites[form].data.form;
-    return Perimortem::Core::View::Vector<Element>(
-        elements ? elements + header.elements_first : nullptr,
-        header.elements_end - header.elements_first);
+
+  constexpr ttx_representation(const U8* data = nullptr, Count size = 0)
+      : data(data), size(size) {}
+  constexpr auto get_bytes() const -> Perimortem::Core::View::Bytes {
+    return Perimortem::Core::View::Bytes(data, size);
   }
-  constexpr auto get_composites() const -> Perimortem::Core::View::Vector<Composite> {
-    const auto& header = composites[form].data.form;
-    return Perimortem::Core::View::Vector<Composite>(composites + header.composites_first,
-        header.composites_end - header.composites_first);
-  }
-  constexpr auto get_count() const -> Count {
-    const auto entries = get_elements();
-    return entries.get_size() ? entries[entries.get_size() - 1].count : 0;
-  }
-  constexpr auto get_composite_count() const -> Count {
-    const auto entries = get_composites();
-    return entries.get_size() ? entries[entries.get_size() - 1].get_count() : 0;
-  }
-  constexpr auto get_form(Count index) const -> ttx_representation {
-    return ttx_representation(elements, composites, index);
-  }
+  constexpr auto get_depth() const -> U8 { return data[0] & 15; }
+  constexpr auto get_extent() const -> Count;
+  constexpr auto get_alignment() const -> Count;
   constexpr auto get_abi() const -> const ttx_representation& { return *this; }
-  static auto compile(const ttx_schema& schema, Perimortem::Memory::Allocator::Arena& arena)
-      -> Perimortem::Utility::Result<const ttx_representation&, Ttx::Data::Status>;
   constexpr auto compatible(const ttx_representation& other) const -> Bool;
-  constexpr auto compatible_type(const Type& a, const ttx_representation& other, const Type& b) const -> Bool;
-  auto at(Count index) const -> Perimortem::Utility::Result<Position, Ttx::Data::Status>;
-  auto next(Count offset) const -> Perimortem::Utility::Result<Position, Ttx::Data::Status>;
- private:
-  static constexpr auto compare_elements(ttx_representation a, Count a_first, Count a_offset,
-      ttx_representation b, Count b_first, Count b_offset, Count count) -> Bool;
-  static constexpr auto compare_composites(ttx_representation a, Count a_first, Count a_offset,
-      ttx_representation b, Count b_first, Count b_offset, Count count,
-      Bool a_root = False, Bool b_root = False) -> Bool;
+
+  static auto compile(
+      const ttx_schema& schema, Perimortem::Memory::Allocator::Arena& arena)
+      -> Perimortem::Utility::Result<const ttx_representation&, Ttx::Data::Status>;
+
+  // A byte coordinate selects the first primitive whose start is at or after
+  // it. Padding is skipped, and a coordinate inside a primitive advances to
+  // the following primitive rather than returning a partial value. Bounds
+  // means there is no such start. Use visit when consuming a whole record so
+  // each successive observation does not repeat this search from the root.
+  auto next(Count offset) const
+      -> Perimortem::Utility::Result<Position, Ttx::Data::Status>;
+
+  // Whole operations consume primitive occurrences in byte order. Repeated
+  // composites revisit their shared body for each instance, but successive
+  // observations never restart the search at the root. Returning a failure
+  // stops the walk immediately. Only the active composite path occupies stack
+  // space, even when the descriptor represents a very large repeated object.
+  template <typename Consumer>
+  constexpr auto visit(Consumer consumer) const -> Ttx::Data::Status;
+
+  // Prepared selections can ask for a sorted set of exact byte coordinates.
+  // This walk skips the unrequested instances of a range arithmetically, so
+  // selecting its final element does not observe all preceding elements.
+  // Coordinates must be unique and increasing. A coordinate in padding or
+  // inside a primitive returns Bounds rather than rounding to another value.
+  template <typename Consumer>
+  constexpr auto visit(
+      Perimortem::Core::View::Vector<Count> coordinates,
+      Consumer consumer) const -> Ttx::Data::Status;
 #endif
 } ttx_representation;
 
+// Runtime compilation uses temporary owner storage and asks for one final
+// allocation after preparation succeeds. The supplied owner retains that
+// allocation, including the view and its adjacent encoded bytes.
 typedef struct ttx_representation_allocator {
   void* source;
   void* (*allocate)(void* source, Count bytes, Count alignment);
@@ -177,9 +113,26 @@ PERIMORTEM_C ttx_data_status ttx_representation_compile(
     const ttx_representation** result);
 PERIMORTEM_C U8 ttx_representation_compatible(
     const ttx_representation* source, const ttx_representation* destination);
-PERIMORTEM_C ttx_data_status ttx_representation_at(
-    const ttx_representation* source, Count index, ttx_representation_position* result);
 PERIMORTEM_C ttx_data_status ttx_representation_next(
     const ttx_representation* source, Count offset, ttx_representation_position* result);
+
+// C operations need the same streaming walk as native consumers. The callback
+// receives each primitive's physical coordinate and type while the walker
+// retains its current path on the stack. Returning a failure stops before the
+// next occurrence. No callback state or position pointer survives the call, so
+// consuming a record needs neither an allocated iterator nor repeated searches.
+typedef struct ttx_representation_visitor {
+  void* source;
+  ttx_data_status (*visit)(void* source, ttx_representation_position position);
+} ttx_representation_visitor;
+
+PERIMORTEM_C ttx_data_status ttx_representation_visit(
+    const ttx_representation* source, ttx_representation_visitor visitor);
+
+// The coordinates are a borrowed, strictly increasing selection of primitive
+// starts. Unselected repetitions consume no callbacks or expanded inventory.
+PERIMORTEM_C ttx_data_status ttx_representation_visit_selected(
+    const ttx_representation* source, const Count* coordinates, Count count,
+    ttx_representation_visitor visitor);
 
 #endif

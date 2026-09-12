@@ -13,8 +13,6 @@ namespace Ttx::Data::Protocol {
 // keeping the C output parameter inside the implementation boundary.
 class Fragment {
  public:
-  using Function = ttx_fragment_function;
-
   // View accepts the primitive observations described by its representation. It
   // needs no destination storage to establish that requirement with a provider.
   class View {
@@ -82,9 +80,6 @@ class Fragment {
 
     auto get_r64(Count position) const
         -> Perimortem::Utility::Result<R64, Status>;
-
-    auto get_function(Count position) const
-        -> Perimortem::Utility::Result<Function, Status>;
 
     auto get_pointer(Count position) const
         -> Perimortem::Utility::Result<void*, Status>;

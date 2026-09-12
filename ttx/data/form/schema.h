@@ -6,10 +6,9 @@
 
 #include "ttx/data/status.h"
 
-// Native pointers are part of the supported platform contract. Keeping that
-// geometry fixed lets a callable describe just its input and output instead
-// of asking every provider to restate its carrier ABI. Calls use the platform's
-// C convention, including explicit receiver arguments in the input schema.
+// Native pointer storage occupies eight bytes on the supported platforms.
+// Data describes that storage without following the pointer or confirming a
+// callable signature. Those meanings are supplied through Semantic contracts.
 #ifdef __cplusplus
 static_assert(sizeof(void*) == 8 && alignof(void*) == 8);
 static_assert(sizeof(void (*)(void)) == 8 && alignof(void (*)(void)) == 8);
@@ -30,7 +29,6 @@ _Static_assert(
 #define TTX_SCHEMA_VALUE ((U8)1)
 #define TTX_SCHEMA_COMPOSITE ((U8)2)
 #define TTX_SCHEMA_RANGE ((U8)4)
-#define TTX_SCHEMA_MAPPING ((U8)5)
 
 typedef U8 ttx_schema_value;
 #define TTX_SCHEMA_U8 ((ttx_schema_value)1)
@@ -52,9 +50,8 @@ struct ttx_schema;
 // Red and green can use the same U32 schema but occupy different positions in
 // a color. Their placement belongs to the parent's entries, which lets a child
 // description be reused without changing its meaning. The author supplies byte
-// offsets from the intended wire record. Compiler calculates logical starts
-// from the children, so there is no second inventory for the author to
-// maintain.
+// offsets from the intended wire record. Reusing a child therefore preserves
+// its description while each placement supplies its own physical coordinate.
 typedef struct ttx_schema_position {
   const struct ttx_schema* schema;
   Count offset;
@@ -92,16 +89,6 @@ typedef struct ttx_schema_range {
 #endif
 } ttx_schema_range;
 
-typedef struct ttx_schema_mapping {
-  const struct ttx_schema* input;
-  const struct ttx_schema* output;
-#ifdef __cplusplus
-  constexpr auto get_input() const -> const ttx_schema* { return input; }
-
-  constexpr auto get_output() const -> const ttx_schema* { return output; }
-#endif
-} ttx_schema_mapping;
-
 typedef struct ttx_schema_primitive {
   U8 type;
   U8 byte_order;
@@ -114,14 +101,15 @@ typedef struct ttx_schema_primitive {
 // Representation. The source can then be discarded independently of that
 // result.
 //
-// Composite contributes a logical interval alongside its physical elements.
-// Range describes repeated geometry compactly, so compiling a million
-// identical scalar positions does not require allocating a million entries.
-// Names and the choice of which source supplies an output belong above Data.
+// Composite preserves a real object boundary around its physical elements.
+// Range can then be used to describe repeated geometry compactly, so compiling
+// a million identical scalar positions can be processed in a single command.
 //
-// Source descriptions may be runtime objects or C++ constants. They need only
-// remain stable during compilation. The resulting publication has its own
-// lifetime and contains no source identity used to justify compatibility.
+// Names and the choice of which source supplies an output belong to the
+// semantic layer. Source descriptions may be runtime objects or C++ constants.
+// They need only remain stable during compilation. The resulting publication
+// has its own lifetime and contains no source identity used to justify
+// compatibility.
 typedef struct ttx_schema {
   Count extent;
   Count alignment;
@@ -130,7 +118,6 @@ typedef struct ttx_schema {
     ttx_schema_primitive value;
     ttx_schema_composite composite;
     ttx_schema_range range;
-    ttx_schema_mapping mapping;
   } data;
 
 #ifdef __cplusplus
@@ -138,7 +125,6 @@ typedef struct ttx_schema {
     Value = TTX_SCHEMA_VALUE,
     Composite = TTX_SCHEMA_COMPOSITE,
     Range = TTX_SCHEMA_RANGE,
-    Mapping = TTX_SCHEMA_MAPPING,
   };
 
   enum class Value : U8 {
@@ -163,7 +149,8 @@ typedef struct ttx_schema {
   using Position = ttx_schema_position;
   using Composite = ttx_schema_composite;
   using Range = ttx_schema_range;
-  using Mapping = ttx_schema_mapping;
+
+  static constexpr auto get_width(Value type) -> Count;
 
   static constexpr auto primitive(
       Value type,
@@ -178,9 +165,6 @@ typedef struct ttx_schema {
       Count stride,
       Count extent,
       Count alignment = 1) -> ttx_schema;
-  static constexpr auto mapping(
-      const ttx_schema& input,
-      const ttx_schema& output) -> ttx_schema;
 
   constexpr auto get_extent() const -> Count { return extent; }
 
@@ -205,8 +189,6 @@ typedef struct ttx_schema {
   }
 
   constexpr auto get_range() const -> const Range& { return data.range; }
-
-  constexpr auto get_mapping() const -> const Mapping& { return data.mapping; }
 
   constexpr auto get_abi() const -> const ttx_schema& { return *this; }
 

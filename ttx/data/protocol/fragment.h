@@ -13,14 +13,14 @@
 //
 // The representation determines which getters the provider supplies. A typed
 // output fixes the extent of each request, so reads cannot ambiguously span
-// fields and padding. Callable values also require the agreed native C
-// signature.
+// fields and padding. Pointer observations describe their storage only.
+// Each result is a native ABI value, even if the described payload uses another
+// byte order. The operation realizes that value in its destination format, so
+// the provider never needs to expose a buffer just to return encoded bytes.
 //
 // Successive reads need not observe a snapshot. An overlapping output can
 // affect later observations, leaving the combined reflow result unspecified.
 // A stronger observation or execution policy belongs outside this contract.
-typedef void (*ttx_fragment_function)(void);
-
 typedef struct ttx_fragment_view_operations {
   const ttx_representation* (*representation)(const void* source);
 } ttx_fragment_view_operations;
@@ -37,10 +37,6 @@ typedef struct ttx_fragment_access_operations {
   ttx_data_status (*get_s64)(const void* source, Count position, S64* result);
   ttx_data_status (*get_r32)(const void* source, Count position, R32* result);
   ttx_data_status (*get_r64)(const void* source, Count position, R64* result);
-  ttx_data_status (*get_function)(
-      const void* source,
-      Count position,
-      ttx_fragment_function* result);
   ttx_data_status (
       *get_pointer)(const void* source, Count position, void** result);
 } ttx_fragment_access_operations;

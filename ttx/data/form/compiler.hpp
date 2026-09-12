@@ -3,8 +3,13 @@
 
 #pragma once
 
-#include "ttx/data/form/representation.hpp"
+#include "perimortem/core/static/vector.hpp"
+
+#include "perimortem/memory/const/vector.hpp"
+
+#include "ttx/data/form/encoding.hpp"
 #include "ttx/data/form/schema.hpp"
+#include "ttx/data/status.hpp"
 
 namespace Ttx::Data::Form {
 
@@ -166,7 +171,9 @@ namespace Ttx::Data::Form {
 //    one singleton at 16, even if the input grouped them as two pairs. Nested
 //    repetition can be combined only while preserving the same starts and
 //    struct occurrences. A count never moves through a struct reference into
-//    its members. Large counts remain compact throughout this work.
+//    its members. Scalar progressions and repeated struct bodies stay compact.
+//    Repeated batches with gaps can require a separate run for each batch, so
+//    their descriptor count grows with the discontinuities being described.
 //
 // 5. For A greater than one, S is the actual distance between starts. For A
 //    equal to one, S is the intrinsic element size: primitive width or the
@@ -200,8 +207,8 @@ namespace Ttx::Data::Form {
 //
 // 10. Write only that final depth, with unused bits zero. Hashing, runtime
 //     versus constant evaluation, and allocation policy cannot affect the
-//     output. The Driver owns working storage and the final buffer so those
-//     construction choices disappear from the published descriptor.
+//     output. Compiler owns temporary preparation and the caller owns the final
+//     buffer, so construction storage disappears from the published descriptor.
 //
 // For example, U8 at offsets zero, one and two followed by U32 at offset four
 // becomes one U8 descriptor with A three and S one, then one U32 descriptor
@@ -216,472 +223,629 @@ namespace Ttx::Data::Form {
 // without storing an entry for each value. Enumeration necessarily visits each
 // requested primitive occurrence, not merely each compressed descriptor.
 //
-// TODO: Implement this packed format in place of the publication graph.
-template <typename Driver>
 class Compiler {
  public:
-  constexpr explicit Compiler(Driver& driver) : driver(driver) {}
+  constexpr Compiler() = default;
+  Compiler(const Compiler&) = delete;
+  constexpr Compiler(Compiler&&) = default;
 
-  constexpr auto compile(const Schema* source) -> Status {
-    if (!source) {
-      return Status::Invalid;
+  // Compilation keeps its construction inventory until publication. Success
+  // establishes the precondition for size and write, while a failed attempt
+  // leaves only temporary storage that the compiler will release normally.
+  constexpr auto compile(const Schema& source) -> Status {
+    bodies.resize(0);
+    elements.resize(0);
+    sources.resize(0);
+    order.resize(0);
+    buckets.resize(0);
+    block_count = 0;
+    depth = 0;
+    for (Count i = 0; i < primitive_bodies.get_size(); ++i) {
+      primitive_bodies[i] = 0;
     }
 
-    return driver.find(source).visit(
-        [&]() {
-          const Count alignment = source->get_alignment();
-          if (!alignment || (alignment & (alignment - 1))) {
-            return Status::Invalid;
-          }
+    Count root = 0;
+    const auto status = prepare(source, root);
+    if (status != Status::Success) {
+      return status;
+    }
 
-          driver.cache(source, nullptr);
-          Representation result(
-              Representation::Kind::Sequence, source->get_extent(), alignment);
-          switch (source->get_kind()) {
-          case Schema::Kind::Value:
-            return compile_value(*source, result);
-          case Schema::Kind::Mapping:
-            return compile_mapping(*source, result);
-          case Schema::Kind::Composite:
-          case Schema::Kind::Range:
-            return compile_sequence(*source, result);
-          }
+    const auto numbering = number(root);
+    if (numbering != Status::Success) {
+      return numbering;
+    }
 
-          return Status::Invalid;
-        },
-        [](const Representation* result) {
-          return result ? Status::Success : Status::Invalid;
-        });
+    return choose_depth();
+  }
+
+  constexpr auto get_size() const -> Count { return block_count * 4 * depth; }
+  constexpr auto get_depth() const -> U8 { return depth; }
+
+  // The prepared records already contain every decision. This pass merely
+  // replaces internal body IDs with their assigned block indices and writes
+  // the bits. Check capacity once so a short target receives no partial form.
+  constexpr auto write(Perimortem::Core::Access::Bytes target) const -> Status {
+    if (target.get_size() < get_size()) {
+      return Status::Bounds;
+    }
+
+    Perimortem::Core::Writer::Binary<Perimortem::Core::Data::ByteOrder::Little>
+        writer(target);
+    for (Count i = 0; i < order.get_size(); ++i) {
+      const auto& body = bodies[order[i]];
+      const auto header = Encoding::header(
+          Encoding::Header(body.size, body.alignment, body.extent), depth);
+      header.write(writer, depth);
+      for (Count j = 0; j < body.size; ++j) {
+        auto entry = elements[body.first + j];
+        if (entry.composite) {
+          entry.type = bodies[entry.type].block;
+        }
+
+        const auto block = Encoding::element(entry, depth);
+        block.write(writer, depth);
+      }
+    }
+
+    return writer.is_valid() ? Status::Success : Status::Bounds;
   }
 
  private:
-  using Elements = typename Driver::Elements;
-  using Composites = typename Driver::Composites;
-  using Element = Representation::Element;
-  using Composite = Representation::Composite;
+  using Element = Encoding::Element;
+  using Elements = Perimortem::Memory::Const::Vector<Element>;
 
-  constexpr auto compile_value(const Schema& source, Representation& result)
-      -> Status {
-    const auto primitive = Schema::primitive(source.get_value());
-    if (!primitive.get_extent()) {
+  struct Body {
+    Count extent;
+    Count alignment;
+    Count first;
+    Count size;
+    U64 hash;
+    Count next = 0;
+    Count block = Count(-1);
+
+    constexpr Body(
+        Count extent = 0,
+        Count alignment = 1,
+        Count first = 0,
+        Count size = 0,
+        U64 hash = 0)
+        : extent(extent),
+          alignment(alignment),
+          first(first),
+          size(size),
+          hash(hash) {}
+  };
+
+  // Remembering a source before following children lets another encounter
+  // detect a containment cycle. Completion replaces the pending marker with
+  // the canonical body ID that later visits can reuse.
+  struct Source {
+    const Schema* schema = nullptr;
+    Count body = Count(-1);
+
+    constexpr Source(const Schema* schema = nullptr) : schema(schema) {}
+  };
+
+  // These helpers share the compiler's temporary inventories. Keeping them on
+  // the owner makes their phase dependencies explicit without exposing a
+  // Driver or passing a construction graph through every recursive call.
+  constexpr auto prepare(const Schema& source, Count& result) -> Status {
+    // Primitive facts are complete at this edge. Intern their one descriptor
+    // directly instead of allocating a temporary vector and memo entry for
+    // every independently authored spelling of the same scalar.
+    if (source.get_kind() == Schema::Kind::Value) {
+      return prepare_value(source, result);
+    }
+
+    for (Count i = 0; i < sources.get_size(); ++i) {
+      if (sources[i].schema == &source) {
+        result = sources[i].body;
+        return result == Count(-1) ? Status::Invalid : Status::Success;
+      }
+    }
+
+    const Count alignment = source.get_alignment();
+    if (!alignment || (alignment & (alignment - 1))) {
       return Status::Invalid;
     }
 
-    if (source.get_extent() != primitive.get_extent() ||
-        source.get_alignment() != primitive.get_alignment()) {
-      return Status::Invalid;
-    }
-
-    if (source.get_byte_order() > Schema::ByteOrder::Big) {
-      return Status::Invalid;
-    }
-
-    result.kind = static_cast<U8>(Representation::Kind::Value);
-    result.count = 1;
-    result.data.value.type = static_cast<U8>(source.get_value());
-    result.data.value.byte_order = static_cast<U8>(source.get_byte_order());
-    return publish(source, result);
-  }
-
-  constexpr auto compile_mapping(const Schema& source, Representation& result)
-      -> Status {
-    if (source.get_extent() != 8 || source.get_alignment() != 8) {
-      return Status::Invalid;
-    }
-
-    const auto& mapping = source.get_mapping();
-    const auto input = compile(mapping.get_input());
-    if (input != Status::Success) {
-      return input;
-    }
-
-    const auto output = compile(mapping.get_output());
-    if (output != Status::Success) {
-      return output;
-    }
-
-    result.kind = static_cast<U8>(Representation::Kind::Mapping);
-    result.count = 1;
-    result.data.mapping.input = *driver.find(mapping.get_input());
-    result.data.mapping.output = *driver.find(mapping.get_output());
-    return publish(source, result);
-  }
-
-  constexpr auto compile_sequence(const Schema& source, Representation& result)
-      -> Status {
-    Elements elements;
-    Composites composites;
-    const auto status =
-        source.get_kind() == Schema::Kind::Composite
-            ? emit_composite(source, 0, result.count, elements, composites)
-            : emit_range(source, 0, result.count, elements, composites);
+    const Count slot = sources.get_size();
+    sources.insert(Source(&source));
+    Elements pending;
+    const auto status = collect(source, pending);
     if (status != Status::Success) {
       return status;
     }
 
-    // Canonical interval order is preorder: starts ascend, and enclosing
-    // intervals precede their children. Equal adjacent intervals represent the
-    // same boundary, even when several authored wrappers supplied it.
-    Composites compact;
-    for (auto entry : composites.get_view()) {
-      // Every publication already supplies its whole interval through count.
-      // A nested record retains that interval when placed inside a larger one.
-      if (entry.count == 1 && !entry.first && entry.end == result.count) {
-        entry.end = entry.first;
-      }
-
-      if (entry.first == entry.end && !entry.pattern) {
-        continue;
-      }
-
-      if (compact.get_size()) {
-        const auto& previous = compact[compact.get_size() - 1];
-        if (!entry.pattern && !previous.pattern && entry.count == 1 &&
-            previous.count == 1 && entry.first == previous.first &&
-            entry.end == previous.end) {
-          continue;
-        }
-      }
-
-      append_composite(compact, entry);
+    Elements normalized;
+    const auto normalization = normalize(pending, normalized);
+    if (normalization != Status::Success) {
+      return normalization;
     }
 
-    for (Count i = 0; i < compact.get_size(); ++i) {
-      auto& entry = compact[i];
-      entry.ordinal = result.composite_count;
-      const Count width = entry.pattern ? entry.pattern->composite_count +
-                                              Count(entry.first != entry.end)
-                                        : 1;
-      Count count;
-      if (__builtin_mul_overflow(entry.count, width, &count) ||
-          __builtin_add_overflow(
-              result.composite_count, count, &result.composite_count)) {
-        return Status::Overflow;
-      }
-    }
-
-    result.data.sequence.size = elements.get_size();
-    result.data.sequence.elements =
-        driver.publish_elements(elements.get_view());
-    result.composite_size = compact.get_size();
-    result.composites = driver.publish_composites(compact.get_view());
-    return publish(source, result);
-  }
-
-  // Each placement is emitted once into the root's work buffers. A Composite
-  // reserves its interval before its children, then closes it once their total
-  // logical width is known. No intermediate position arrays are copied upward.
-  constexpr auto emit_composite(
-      const Schema& source,
-      Count offset,
-      Count& index,
-      Elements& elements,
-      Composites& composites) -> Status {
-    const auto children = source.get_positions();
-    if (children.get_size() && !children.get_data()) {
+    if (normalized.is_empty() && source.get_extent()) {
       return Status::Invalid;
     }
 
-    const Count slot = composites.get_size();
-    const Count first = index;
-    composites.insert(Composite(first));
-    Count end = 0;
-    for (const auto& placement : children) {
-      const auto* child = placement.get_schema();
-      if (!child || placement.get_offset() < end) {
+    const Count extent = source.get_extent();
+    result = intern(
+        extent, normalized.is_empty() ? 1 : alignment, normalized.get_view());
+    sources[slot].body = result;
+    return Status::Success;
+  }
+
+  constexpr auto collect(const Schema& source, Elements& output) -> Status {
+    switch (source.get_kind()) {
+    case Schema::Kind::Value:
+      return Status::Invalid;
+    case Schema::Kind::Range:
+      return collect_range(source, output);
+    case Schema::Kind::Composite:
+      return collect_composite(source, output);
+    }
+
+    return Status::Invalid;
+  }
+
+  constexpr auto prepare_value(const Schema& source, Count& result) -> Status {
+    const Count width = Schema::get_width(source.get_value());
+    if (!width || source.get_extent() != width) {
+      return Status::Invalid;
+    }
+
+    if (source.get_alignment() != width) {
+      return Status::Invalid;
+    }
+
+    const auto order = source.get_byte_order();
+    if (order != Schema::ByteOrder::Little && order != Schema::ByteOrder::Big) {
+      return Status::Invalid;
+    }
+
+    const Count code =
+        static_cast<U8>(source.get_value()) |
+        ((width > 1 && order == Schema::ByteOrder::Big) ? 64 : 0);
+    if (primitive_bodies[code]) {
+      result = primitive_bodies[code] - 1;
+      return Status::Success;
+    }
+
+    const Element entry(1, 0, width, code);
+    result = intern(
+        width, width, Perimortem::Core::View::Vector<Element>(&entry, 1));
+    primitive_bodies[code] = result + 1;
+    return Status::Success;
+  }
+
+  constexpr auto collect_composite(const Schema& source, Elements& output)
+      -> Status {
+    const auto positions = source.get_positions();
+    if (positions.get_size() && !positions.get_data()) {
+      return Status::Invalid;
+    }
+
+    for (const auto position : positions) {
+      const auto* child = position.get_schema();
+      if (!child || position.get_offset() > source.get_extent()) {
         return Status::Invalid;
       }
 
-      if (__builtin_add_overflow(
-              placement.get_offset(), child->get_extent(), &end)) {
-        return Status::Overflow;
-      }
-
-      if (end > source.get_extent()) {
+      if (child->get_extent() > source.get_extent() - position.get_offset()) {
         return Status::Invalid;
       }
 
-      const auto status = emit(
-          *child, offset + placement.get_offset(), index, elements, composites);
+      Count body = 0;
+      const auto status = prepare(*child, body);
       if (status != Status::Success) {
         return status;
       }
-    }
 
-    composites[slot].end = index;
-    return first == index && source.get_extent() ? Status::Invalid
-                                                 : Status::Success;
-  }
-
-  constexpr auto emit(
-      const Schema& source,
-      Count offset,
-      Count& index,
-      Elements& elements,
-      Composites& composites) -> Status {
-    if (source.get_kind() == Schema::Kind::Composite) {
-      return driver.find(&source).visit(
-          [&]() {
-            const Count alignment = source.get_alignment();
-            if (!alignment || (alignment & (alignment - 1))) {
-              return Status::Invalid;
-            }
-
-            driver.cache(&source, nullptr);
-            const auto status =
-                emit_composite(source, offset, index, elements, composites);
-            driver.forget(&source);
-            return status;
-          },
-          [&](const Representation* ready) {
-            if (!ready) {
-              return Status::Invalid;
-            }
-
-            composites.insert(Composite(index, index + ready->count));
-            return emit_prepared(*ready, offset, index, elements, composites);
-          });
-    }
-
-    const auto status = compile(&source);
-    if (status != Status::Success) {
-      return status;
-    }
-
-    return emit_prepared(
-        **driver.find(&source), offset, index, elements, composites);
-  }
-
-  constexpr auto emit_prepared(
-      const Representation& ready,
-      Count offset,
-      Count& index,
-      Elements& elements,
-      Composites& composites) -> Status {
-    const Count first = index;
-    if (__builtin_add_overflow(index, ready.count, &index)) {
-      return Status::Overflow;
-    }
-
-    if (ready.get_kind() == Representation::Kind::Sequence) {
-      for (const auto& entry : ready.get_elements()) {
-        append_element(
-            elements, Element(
-                          entry.representation, offset + entry.offset,
-                          first + entry.index, entry.count, entry.stride));
-      }
-    } else if (ready.count) {
-      append_element(elements, Element(&ready, offset, first, 1, ready.extent));
-    }
-
-    for (const auto& entry : ready.get_composites()) {
-      composites.insert(Composite(
-          first + entry.first, first + entry.end, 0, entry.count, entry.stride,
-          entry.pattern));
+      append(*child, body, position.get_offset(), output);
     }
 
     return Status::Success;
   }
 
-  constexpr auto emit_range(
+  // A real Composite remains a referenced body. Value and Range source nodes
+  // contribute occurrences directly, so authored batching cannot add a new
+  // boundary to the resulting format.
+  constexpr auto append(
       const Schema& source,
+      Count body,
       Count offset,
-      Count& index,
-      Elements& elements,
-      Composites& composites) -> Status {
-    const auto& range = source.get_range();
-    const auto status = compile(range.get_element());
+      Elements& output) const -> void {
+    const auto& ready = bodies[body];
+    if (!ready.size) {
+      return;
+    }
+
+    if (source.get_kind() == Schema::Kind::Composite) {
+      output.insert(Element(1, offset, ready.extent, body, True));
+      return;
+    }
+
+    for (Count i = 0; i < ready.size; ++i) {
+      auto entry = elements[ready.first + i];
+      entry.offset += offset;
+      output.insert(entry);
+    }
+  }
+
+  constexpr auto collect_range(const Schema& source, Elements& output)
+      -> Status {
+    const auto range = source.get_range();
+    const auto* child = range.get_element();
+    if (!child) {
+      return Status::Invalid;
+    }
+
+    Count body = 0;
+    const auto status = prepare(*child, body);
     if (status != Status::Success) {
       return status;
     }
 
-    const auto* pattern = *driver.find(range.get_element());
-    if (!range.get_count() || !pattern->count) {
+    const Count count = range.get_count();
+    const auto ready = bodies[body];
+    if (!count || !ready.size) {
       return source.get_extent() ? Status::Invalid : Status::Success;
     }
 
-    Count count;
-    if (__builtin_mul_overflow(range.get_count(), pattern->count, &count)) {
-      return Status::Overflow;
-    }
-
-    Count last;
-    if (__builtin_mul_overflow(
-            range.get_count() - 1, range.get_stride(), &last)) {
-      return Status::Overflow;
-    }
-
-    Count end;
-    if (__builtin_add_overflow(last, pattern->extent, &end)) {
-      return Status::Overflow;
-    }
-
-    if (end > source.get_extent()) {
+    // Check the last instance rather than count times stride. A final stride
+    // is not occupied storage, and its padding need not be present in extent.
+    if (ready.extent > source.get_extent()) {
       return Status::Invalid;
     }
 
-    if (range.get_count() > 1 && range.get_stride() < pattern->extent) {
-      return Status::Invalid;
+    const Count stride = range.get_stride();
+    if (count > 1) {
+      if (!stride || stride < ready.extent) {
+        return Status::Invalid;
+      }
+
+      if (count - 1 > (source.get_extent() - ready.extent) / stride) {
+        return count - 1 > (Count(-1) - ready.extent) / stride
+                   ? Status::Overflow
+                   : Status::Invalid;
+      }
     }
 
-    const Count first = index;
-    if (__builtin_add_overflow(index, count, &index)) {
-      return Status::Overflow;
+    if (child->get_kind() == Schema::Kind::Composite) {
+      output.insert(
+          Element(count, 0, count == 1 ? ready.extent : stride, body, True));
+      return Status::Success;
     }
 
-    append_element(
-        elements,
-        Element(
-            pattern, offset, first, range.get_count(),
-            range.get_count() == 1 ? pattern->extent : range.get_stride()));
-    const Bool record =
-        range.get_element()->get_kind() == Schema::Kind::Composite;
-    if (pattern->composite_count || record) {
-      composites.insert(Composite(
-          first, record ? first + pattern->count : first, 0, range.get_count(),
-          pattern->count, pattern));
+    if (count == 1) {
+      append(*child, body, 0, output);
+      return Status::Success;
+    }
+
+    // A repeated progression can stay one descriptor when the next batch
+    // starts at its next expected element. Otherwise each batch contributes
+    // its own runs, as required by the canonical format rather than by the
+    // number of nodes in the authored Schema.
+    if (ready.size == 1) {
+      auto entry = elements[ready.first];
+      if (entry.count == 1) {
+        entry.count = count;
+        entry.stride = stride;
+        output.insert(entry);
+        return Status::Success;
+      }
+
+      // The next batch must start where another element of this run would
+      // start. Admission above already fitted at least two whole batches,
+      // which also bounds this one past the end stride calculation.
+      const Count next_batch = entry.count * entry.stride;
+      if (stride == next_batch) {
+        entry.count *= count;
+        output.insert(entry);
+        return Status::Success;
+      }
+    }
+
+    for (Count i = 0; i < count; ++i) {
+      append(*child, body, i * stride, output);
     }
 
     return Status::Success;
   }
 
-  // Keep one pending progression at the end of the output. A new sibling can
-  // extend it when it supplies the same element exactly at the next byte start.
-  // Repetition of a one entry pattern first reduces to that entry's
-  // progression.
-  static constexpr auto append_element(Elements& output, Element value)
-      -> void {
-    while (value.representation->get_kind() == Representation::Kind::Sequence &&
-           value.representation->data.sequence.size == 1) {
-      const auto& inner = value.representation->data.sequence.elements[0];
-      if (value.count == 1) {
-        value.offset += inner.offset;
-        value.count = inner.count;
-        value.stride = inner.stride;
-      } else if (inner.count == 1) {
-        value.offset += inner.offset;
-      } else {
-        Count batch_stride;
-        if (__builtin_mul_overflow(inner.count, inner.stride, &batch_stride)) {
-          break;
-        }
+  constexpr auto width(const Element& value) const -> Count {
+    return value.composite ? bodies[value.type].extent
+                           : Schema::get_width(Schema::Value(value.type & 63));
+  }
 
-        if (value.stride != batch_stride) {
-          break;
-        }
-
-        value.count *= inner.count;
-        value.stride = inner.stride;
-        value.offset += inner.offset;
+  // A small heap merges run starts. It also handles interleaved primitive
+  // ranges without expanding an entire range just to find the next member.
+  // A consumed prefix leaves its remainder in the same inventory.
+  static constexpr auto descend(Elements& heap, Count root) -> void {
+    for (Count child = root * 2 + 1; child < heap.get_size();
+         child = root * 2 + 1) {
+      if (child + 1 < heap.get_size() &&
+          heap[child + 1].offset < heap[child].offset) {
+        ++child;
       }
 
-      value.representation = inner.representation;
-    }
-
-    if (output.get_size()) {
-      if (merge_elements(output[output.get_size() - 1], value)) {
+      if (heap[root].offset <= heap[child].offset) {
         return;
       }
-    }
 
-    output.insert(value);
+      Perimortem::Core::Data::swap(heap[root], heap[child]);
+      root = child;
+    }
   }
 
-  static constexpr auto merge_elements(Element& last, const Element& value)
-      -> Bool {
-    if (!last.representation->compatible(*value.representation)) {
-      return False;
-    }
-
-    const Count stride =
-        last.count == 1 ? value.offset - last.offset : last.stride;
-    if (value.count > 1 && value.stride != stride) {
-      return False;
-    }
-
-    // The next start is a proposed coordinate beyond the current run. It can
-    // overflow even though every occupied position in that run was admitted.
-    Count next;
-    if (__builtin_mul_overflow(last.count, stride, &next)) {
-      return False;
-    }
-
-    if (__builtin_add_overflow(last.offset, next, &next)) {
-      return False;
-    }
-
-    if (next != value.offset) {
-      return False;
-    }
-
-    last.count += value.count;
-    last.stride = stride;
-    return True;
+  static constexpr auto take(Elements& heap) -> Element {
+    const auto result = heap[0];
+    heap[0] = heap[heap.get_size() - 1];
+    heap.resize(heap.get_size() - 1);
+    descend(heap, 0);
+    return result;
   }
 
-  static constexpr auto append_composite(Composites& output, Composite value)
-      -> void {
-    if (value.pattern && !value.pattern->composite_count) {
-      value.pattern = nullptr;
+  static constexpr auto insert(Elements& heap, Element value) -> void {
+    Count index = heap.get_size();
+    heap.insert(value);
+    while (index) {
+      const Count parent = (index - 1) / 2;
+      if (heap[parent].offset <= heap[index].offset) {
+        return;
+      }
+
+      Perimortem::Core::Data::swap(heap[parent], heap[index]);
+      index = parent;
+    }
+  }
+
+  constexpr auto normalize(Elements& pending, Elements& result) const
+      -> Status {
+    // Authored records commonly arrive in wire order. Consume that sequence
+    // directly. The heap is needed only if a later run starts before the
+    // preceding run ends, including otherwise valid interleaved progressions.
+    Count end = 0;
+    Bool ordered = True;
+    for (Count i = 0; i < pending.get_size(); ++i) {
+      const auto entry = pending[i];
+      if (entry.offset < end) {
+        ordered = False;
+        break;
+      }
+
+      end = entry.offset + (entry.count - 1) * entry.stride + width(entry);
+      merge(result, entry);
     }
 
-    while (value.pattern && value.first == value.end &&
-           value.pattern->composite_size == 1) {
-      const auto& inner = value.pattern->composites[0];
-      if (inner.count > 1) {
-        Count period;
-        if (__builtin_mul_overflow(inner.count, inner.stride, &period)) {
-          break;
-        }
+    if (ordered) {
+      return Status::Success;
+    }
 
-        if (value.stride != period) {
-          break;
+    result.resize(0);
+    for (Count i = pending.get_size() / 2; i; --i) {
+      descend(pending, i - 1);
+    }
+
+    end = 0;
+    while (!pending.is_empty()) {
+      auto current = take(pending);
+      if (!pending.is_empty() && current.count > 1) {
+        const Count next = pending[0].offset;
+        if (next > current.offset) {
+          const Count delta = next - current.offset;
+          const Count prefix =
+              delta / current.stride + (delta % current.stride != 0);
+          if (prefix < current.count) {
+            auto remaining = current;
+            remaining.offset += prefix * current.stride;
+            remaining.count -= prefix;
+            current.count = prefix;
+            insert(pending, remaining);
+          }
         }
       }
 
-      value.first += inner.first;
-      value.end = value.first + inner.end - inner.first;
-      if (inner.count > 1) {
-        value.count *= inner.count;
-        value.stride = inner.stride;
+      if (current.offset < end) {
+        return Status::Invalid;
       }
 
-      value.pattern = inner.pattern;
+      end = current.offset + (current.count - 1) * current.stride +
+            width(current);
+      merge(result, current);
     }
 
-    if (output.get_size()) {
-      auto& last = output[output.get_size() - 1];
-      if (!last.pattern && !value.pattern &&
-          last.end - last.first == value.end - value.first) {
-        const Count stride =
-            last.count == 1 ? value.first - last.first : last.stride;
-        if (value.first == last.first + last.count * stride &&
-            (value.count == 1 || value.stride == stride)) {
-          last.count += value.count;
-          last.stride = stride;
+    return Status::Success;
+  }
+
+  // Greedy runs follow occurrence order, not authored range boundaries. When
+  // only the first member of an incoming run fits, consume that member and
+  // retain the rest as the next candidate. This is what makes 0,4 | 8,16 agree
+  // with 0,4,8 | 16 without expanding either input progression.
+  constexpr auto merge(Elements& output, Element current) const -> void {
+    if (!output.is_empty()) {
+      auto& previous = output[output.get_size() - 1];
+      const Count stride = previous.count == 1
+                               ? current.offset - previous.offset
+                               : previous.stride;
+      const Bool same = previous.type == current.type &&
+                        previous.composite == current.composite;
+      const Count distance = current.offset - previous.offset;
+      if (same && stride && distance / stride == previous.count &&
+          distance % stride == 0) {
+        previous.stride = stride;
+        ++previous.count;
+        --current.count;
+        if (!current.count) {
+          return;
+        }
+
+        current.offset += current.stride;
+        if (current.stride == stride) {
+          previous.count += current.count;
           return;
         }
       }
     }
 
-    output.insert(value);
-  }
-
-  constexpr auto publish(const Schema& source, Representation& result)
-      -> Status {
-    if (!result.count) {
-      if (result.extent) {
-        return Status::Invalid;
-      }
-
-      result = Representation();
+    if (current.count == 1) {
+      current.stride = width(current);
     }
 
-    driver.cache(&source, driver.publish(result));
+    output.insert(current);
+  }
+
+  static constexpr auto hash(U64 previous, Count value) -> U64 {
+    return (previous ^ value) * U64(1099511628211);
+  }
+
+  constexpr auto equal(
+      const Body& body,
+      Perimortem::Core::View::Vector<Element> entries) const -> Bool {
+    if (body.size != entries.get_size()) {
+      return False;
+    }
+
+    for (Count i = 0; i < body.size; ++i) {
+      const auto& a = elements[body.first + i];
+      const auto& b = entries.get_data()[i];
+      if (a.count != b.count || a.offset != b.offset || a.stride != b.stride ||
+          a.type != b.type || a.composite != b.composite) {
+        return False;
+      }
+    }
+
+    return True;
+  }
+
+  constexpr auto intern(
+      Count extent,
+      Count alignment,
+      Perimortem::Core::View::Vector<Element> entries) -> Count {
+    U64 fingerprint = hash(hash(14695981039346656037ULL, extent), alignment);
+    for (Count i = 0; i < entries.get_size(); ++i) {
+      const auto& entry = entries.get_data()[i];
+      fingerprint = hash(fingerprint, entry.count);
+      fingerprint = hash(fingerprint, entry.offset);
+      fingerprint = hash(fingerprint, entry.stride);
+      fingerprint = hash(fingerprint, entry.type);
+      fingerprint = hash(fingerprint, entry.composite.value);
+    }
+
+    if (buckets.get_size() <= bodies.get_size()) {
+      const Count size =
+          Perimortem::Core::Math::max(Count(16), buckets.get_size() * 2);
+      buckets.resize(size);
+      for (Count i = 0; i < size; ++i) {
+        buckets[i] = 0;
+      }
+
+      for (Count i = 0; i < bodies.get_size(); ++i) {
+        const Count bucket = bodies[i].hash % size;
+        bodies[i].next = buckets[bucket];
+        buckets[bucket] = i + 1;
+      }
+    }
+
+    const Count bucket = fingerprint % buckets.get_size();
+    for (Count id = buckets[bucket]; id; id = bodies[id - 1].next) {
+      const auto& body = bodies[id - 1];
+      if (body.hash == fingerprint && body.extent == extent &&
+          body.alignment == alignment && equal(body, entries)) {
+        return id - 1;
+      }
+    }
+
+    Body body(
+        extent, alignment, elements.get_size(), entries.get_size(),
+        fingerprint);
+    body.next = buckets[bucket];
+    for (Count i = 0; i < entries.get_size(); ++i) {
+      elements.insert(entries[i]);
+    }
+
+    const Count id = bodies.get_size();
+    bodies.insert(body);
+    buckets[bucket] = id + 1;
+    return id;
+  }
+
+  constexpr auto number(Count id) -> Status {
+    if (bodies[id].block != Count(-1)) {
+      return Status::Success;
+    }
+
+    const auto body = bodies[id];
+    if (body.size >= Count(-1) - block_count) {
+      return Status::Overflow;
+    }
+
+    bodies[id].block = block_count;
+    block_count += 1 + body.size;
+    order.insert(id);
+    for (Count i = 0; i < body.size; ++i) {
+      const auto entry = elements[body.first + i];
+      if (entry.composite) {
+        const auto status = number(entry.type);
+        if (status != Status::Success) {
+          return status;
+        }
+      }
+    }
+
     return Status::Success;
   }
 
-  Driver& driver;
+  constexpr auto choose_depth() -> Status {
+    Count common = 0;
+    Count reference = 0;
+    Count extent = 0;
+    for (Count i = 0; i < order.get_size(); ++i) {
+      const auto& body = bodies[order[i]];
+      common = Perimortem::Core::Math::max(common, body.size);
+      common = Perimortem::Core::Math::max(common, body.alignment);
+      extent = Perimortem::Core::Math::max(extent, body.extent);
+      for (Count j = 0; j < body.size; ++j) {
+        const auto entry = elements[body.first + j];
+        const Count type =
+            entry.composite ? bodies[entry.type].block : entry.type;
+        common = Perimortem::Core::Math::max(common, entry.count);
+        common = Perimortem::Core::Math::max(common, entry.offset);
+        common = Perimortem::Core::Math::max(common, entry.stride);
+        reference = Perimortem::Core::Math::max(reference, type);
+      }
+    }
+
+    // Five fields grow by eight bits per depth. P has one fewer bit, while E
+    // grows by sixteen with four bits reserved for F. Round each requirement
+    // up once, then take the largest. No candidate needs another schema scan.
+    // Perimortem's log2 returns the occupied bit count, including zero for zero.
+    const auto bits = [](Count value) -> Count {
+      return Perimortem::Core::Math::log2(value);
+    };
+    const Count common_depth = (bits(common) + 7) / 8;
+    const Count reference_depth = (bits(reference) + 8) / 8;
+    const Count extent_depth = (bits(extent) + 19) / 16;
+    const Count required = Perimortem::Core::Math::max(
+        common_depth,
+        Perimortem::Core::Math::max(reference_depth, extent_depth));
+    if (required > 15 || block_count > Count(-1) / (4 * required)) {
+      return Status::Overflow;
+    }
+
+    depth = U8(required);
+    return Status::Success;
+  }
+
+  Perimortem::Memory::Const::Vector<Body> bodies;
+  Elements elements;
+  Perimortem::Memory::Const::Vector<Source> sources;
+  Perimortem::Memory::Const::Vector<Count> buckets;
+  Perimortem::Memory::Const::Vector<Count> order;
+  // The seven bit primitive code includes byte order. Its finite vocabulary
+  // gives scalar normalization a direct lookup independent of source identity.
+  Perimortem::Core::Static::Vector<Count, 128> primitive_bodies;
+  Count block_count = 0;
+  U8 depth = 0;
 };
 
 }  // namespace Ttx::Data::Form

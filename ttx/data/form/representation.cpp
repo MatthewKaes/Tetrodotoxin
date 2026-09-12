@@ -3,115 +3,70 @@
 
 #include "ttx/data/form/representation.hpp"
 
+using namespace Ttx::Data;
 using namespace Ttx::Data::Form;
+
+static auto header(const Representation& source, Count body)
+    -> Encoding::Header {
+  return Encoding::header(
+      Encoding::Block::read(source.get_bytes(), body, source.get_depth()),
+      source.get_depth());
+}
+
+static auto element(const Representation& source, Count block)
+    -> Encoding::Element {
+  return Encoding::element(
+      Encoding::Block::read(source.get_bytes(), block, source.get_depth()),
+      source.get_depth());
+}
+
+// Byte lookup can skip padding and whole instances. A coordinate inside a
+// primitive asks for the next start, while an exact coordinate selects that
+// primitive. Whole traversal uses visit instead of repeating this search.
+static auto next(
+    const Representation& source,
+    Count body,
+    Count offset,
+    Count requested,
+    Representation::Position& result) -> Bool {
+  const auto form = header(source, body);
+  for (Count i = 0; i < form.count; ++i) {
+    const auto entry = element(source, body + i + 1);
+    const Count first = offset + entry.offset;
+    const Count local = requested > first ? requested - first : 0;
+    Count instance = local / entry.stride;
+    if (instance < entry.count) {
+      const Count start = first + instance * entry.stride;
+      if (entry.composite) {
+        if (next(source, entry.type, start, requested, result)) {
+          return True;
+        }
+
+        ++instance;
+        if (instance < entry.count) {
+          return next(
+              source, entry.type, first + instance * entry.stride, 0, result);
+        }
+      } else {
+        instance += start < requested;
+        if (instance < entry.count) {
+          result = Representation::Position(
+              first + instance * entry.stride, Schema::Value(entry.type & 63),
+              (entry.type & 64) ? Schema::ByteOrder::Big
+                                : Schema::ByteOrder::Little);
+          return True;
+        }
+      }
+    }
+  }
+
+  return False;
+}
 
 auto ttx_representation_compatible(
     const Representation* source,
     const Representation* destination) -> U8 {
   return source && destination && source->compatible(*destination);
-}
-
-auto ttx_representation_at(
-    const Representation* source,
-    Count index,
-    Representation::Position* result) -> ttx_data_status {
-  if (!source || !result) {
-    return TTX_DATA_INVALID;
-  }
-
-  if (index >= source->count) {
-    return TTX_DATA_BOUNDS;
-  }
-
-  const Count requested = index;
-  Count offset = 0;
-  while (source->get_kind() == Representation::Kind::Sequence) {
-    const auto entries = source->get_elements();
-    Count first = index;
-    if (entries.get_size() != source->count) {
-      first = 0;
-      Count end = entries.get_size();
-      while (first + 1 < end) {
-        const Count middle = first + (end - first) / 2;
-        if (entries[middle].index <= index) {
-          first = middle;
-        } else {
-          end = middle;
-        }
-      }
-    }
-
-    const auto& entry = entries[first];
-    index -= entry.index;
-    const Count width = entry.representation->count;
-    offset += entry.offset + (index / width) * entry.stride;
-    index %= width;
-    source = entry.representation;
-  }
-
-  *result = Representation::Position(source, offset, requested);
-  return TTX_DATA_SUCCESS;
-}
-
-// The array is sorted by occupied byte regions. Binary search selects a region,
-// then repetition arithmetic selects its instance. Recursion follows compact
-// repetition patterns only, never authored Composite or Group nesting.
-static auto next_value(
-    const Representation& source,
-    Count offset,
-    Representation::Position& result) -> Bool {
-  if (offset >= source.extent || !source.count) {
-    return False;
-  }
-
-  if (source.get_kind() != Representation::Kind::Sequence) {
-    if (offset) {
-      return False;
-    }
-
-    result = Representation::Position(&source);
-    return True;
-  }
-
-  const auto entries = source.get_elements();
-  Count first = 0;
-  Count end = entries.get_size();
-  while (first < end) {
-    const Count middle = first + (end - first) / 2;
-    const auto& entry = entries[middle];
-    const Count limit = entry.offset + (entry.count - 1) * entry.stride +
-                        entry.representation->extent;
-    if (limit <= offset) {
-      first = middle + 1;
-    } else {
-      end = middle;
-    }
-  }
-
-  for (; first < entries.get_size(); ++first) {
-    const auto& entry = entries[first];
-    const Count local = offset > entry.offset ? offset - entry.offset : 0;
-    Count repetition = local / entry.stride;
-    if (repetition >= entry.count) {
-      continue;
-    }
-
-    if (next_value(
-            *entry.representation, local - repetition * entry.stride, result)) {
-      result.offset += entry.offset + repetition * entry.stride;
-      result.index += entry.index + repetition * entry.representation->count;
-      return True;
-    }
-
-    if (++repetition < entry.count &&
-        next_value(*entry.representation, 0, result)) {
-      result.offset += entry.offset + repetition * entry.stride;
-      result.index += entry.index + repetition * entry.representation->count;
-      return True;
-    }
-  }
-
-  return False;
 }
 
 auto ttx_representation_next(
@@ -122,6 +77,65 @@ auto ttx_representation_next(
     return TTX_DATA_INVALID;
   }
 
-  return next_value(*source, offset, *result) ? TTX_DATA_SUCCESS
-                                              : TTX_DATA_BOUNDS;
+  return next(*source, 0, 0, offset, *result) ? TTX_DATA_SUCCESS
+                                           : TTX_DATA_BOUNDS;
+}
+
+auto ttx_representation::next(Count offset) const
+    -> Perimortem::Utility::Result<Position, Status> {
+  Position result;
+  const auto status = ttx_representation_next(this, offset, &result);
+  if (status != TTX_DATA_SUCCESS) {
+    return static_cast<Status>(status);
+  }
+
+  return result;
+}
+
+auto ttx_representation_visit(
+    const Representation* source,
+    ttx_representation_visitor visitor) -> ttx_data_status {
+  if (!source || !visitor.visit) {
+    return TTX_DATA_INVALID;
+  }
+
+  return static_cast<ttx_data_status>(source->visit(
+      [&](Representation::Position position) {
+        return static_cast<Status>(visitor.visit(visitor.source, position));
+      }));
+}
+
+auto ttx_representation_visit_selected(
+    const Representation* source,
+    const Count* coordinates,
+    Count count,
+    ttx_representation_visitor visitor) -> ttx_data_status {
+  if (!source || !visitor.visit || (count && !coordinates)) {
+    return TTX_DATA_INVALID;
+  }
+
+  return static_cast<ttx_data_status>(source->visit(
+      Perimortem::Core::View::Vector<Count>(coordinates, count),
+      [&](Representation::Position position) {
+        return static_cast<Status>(visitor.visit(visitor.source, position));
+      }));
+}
+
+auto ttx_representation::compile(
+    const ttx_schema& schema,
+    Perimortem::Memory::Allocator::Arena& arena)
+    -> Perimortem::Utility::Result<const ttx_representation&, Status> {
+  const ttx_representation_allocator allocator = {
+    &arena, [](void* owner, Count bytes, Count) -> void* {
+      return static_cast<Perimortem::Memory::Allocator::Arena*>(owner)
+          ->allocate(bytes)
+          .get_data();
+    }};
+  const ttx_representation* result = nullptr;
+  const auto status = ttx_representation_compile(&schema, allocator, &result);
+  if (status != TTX_DATA_SUCCESS) {
+    return static_cast<Status>(status);
+  }
+
+  return *result;
 }

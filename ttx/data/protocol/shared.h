@@ -6,13 +6,13 @@
 
 #include "ttx/data/form/representation.h"
 
-// A provider may be able to expose the agreed C representation only while it
-// holds a resource. Shared lets it lend that representation with one release
+// A provider may be able to expose data in the agreed C format only while it
+// holds a resource. Shared lets it lend that payload with one release
 // obligation, so the reader can use the pointer without reacquiring the
 // resource for each operation. Semantic Flow keeps this lifetime until the Flow
 // closes.
 //
-// Data is the public pointer that may be cast under the agreed representation.
+// Data is the public payload pointer that may be cast under the agreed format.
 // Source belongs to the release thunk and remains opaque to the reader. Keeping
 // them separate lets an owner release a resource whose internal state has a
 // different representation from the data it lent.
@@ -26,7 +26,7 @@ typedef struct ttx_shared_view_operations {
 } ttx_shared_view_operations;
 typedef struct ttx_shared_access_operations {
   const ttx_representation* (*representation)(const void* source);
-  // Success supplies a ready representation and transfers its release
+  // Success supplies ready payload data and transfers its release
   // obligation. Failure supplies no lifetime. Acquisition itself is finished
   // before returning, even though the acquired lifetime continues afterward.
   ttx_data_status (*acquire)(const void* source, ttx_shared_lifetime* result);

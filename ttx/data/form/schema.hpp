@@ -16,31 +16,31 @@ using Schema = ttx_schema;
 
 }  // namespace Ttx::Data::Form
 
-constexpr auto ttx_schema::primitive(Value type, ByteOrder order)
-    -> ttx_schema {
-  Count width = 0;
+constexpr auto ttx_schema::get_width(Value type) -> Count {
   switch (type) {
   case Value::U8:
   case Value::S8:
-    width = 1;
-    break;
+    return 1;
   case Value::U16:
   case Value::S16:
-    width = 2;
-    break;
+    return 2;
   case Value::U32:
   case Value::S32:
   case Value::R32:
-    width = 4;
-    break;
+    return 4;
   case Value::U64:
   case Value::S64:
   case Value::R64:
   case Value::Pointer:
-    width = 8;
-    break;
+    return 8;
   }
 
+  return 0;
+}
+
+constexpr auto ttx_schema::primitive(Value type, ByteOrder order)
+    -> ttx_schema {
+  const Count width = get_width(type);
   return {
     width,
     width,
@@ -70,10 +70,4 @@ constexpr auto ttx_schema::range(
     alignment,
     static_cast<U8>(Kind::Range),
     {.range = {&element, repeats, stride}}};
-}
-
-constexpr auto ttx_schema::mapping(
-    const ttx_schema& input,
-    const ttx_schema& output) -> ttx_schema {
-  return {8, 8, static_cast<U8>(Kind::Mapping), {.mapping = {&input, &output}}};
 }
