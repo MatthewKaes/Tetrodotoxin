@@ -15,6 +15,7 @@
 #include "tetrodotoxin/library/language/access/instance.hpp"
 #include "tetrodotoxin/library/language/access/static.hpp"
 #include "tetrodotoxin/library/language/model/pack.hpp"
+#include "tetrodotoxin/source/declaration.hpp"
 #include "ttx/concept/reference.hpp"
 #include "ttx/concept/unknown.hpp"
 #include "ttx/lexical/cursor.hpp"
@@ -36,8 +37,8 @@ class Type : public Ttx::Model::Type {
 
   auto bind_interface(Perimortem::System::Uuid requested) const
       -> Perimortem::Utility::Result<
-          Ttx::Concept::Binding,
-          Ttx::Concept::Binding::Failure> override;
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override;
 
   auto resolve_concept(Perimortem::Core::View::Bytes route) const
       -> const Ttx::Concept::Abstract& override;
@@ -230,6 +231,12 @@ class Type : public Ttx::Model::Type {
       -> CallableBindings;
 
  private:
+  friend class Tetrodotoxin::Source::Declaration;
+  auto complete_source(
+      Tetrodotoxin::Source::Declaration::Phase phase,
+      Ttx::Lexical::Cursor* cursor)
+      -> Tetrodotoxin::Source::Declaration::Completion;
+
   auto initialize_authorities(Perimortem::Memory::Allocator::Arena& domain)
       -> void;
 

@@ -11,10 +11,10 @@
 #include "perimortem/utility/result.hpp"
 
 #include "ttx/concept/abstract.h"
-#include "ttx/concept/binding.hpp"
 #include "ttx/concept/documentation.hpp"
 #include "ttx/concept/type_identity.hpp"
 #include "ttx/concept/visitor.hpp"
+#include "ttx/semantic/binding.hpp"
 
 namespace Ttx::Concept {
 
@@ -76,7 +76,7 @@ class Abstract {
 
     template <typename Contract>
     auto bind() const -> Perimortem::Utility::
-        Result<typename Contract::Handle, Binding::Failure> {
+        Result<typename Contract::Handle, Semantic::Binding::Failure> {
       // First see if we can resolve the question staticly with C++'s native
       // type system.
       if constexpr (__is_same(Contract, Abstract)) {
@@ -91,15 +91,15 @@ class Abstract {
       switch (status) {
       case TTX_BINDING_SATISFIED:
         if (result.operations) {
-          return Binding(result).template get<Contract>();
+          return Semantic::Binding(result).template get<Contract>();
         }
-        return Binding::Failure::Rejected;
+        return Semantic::Binding::Failure::Rejected;
       case TTX_BINDING_UNSUPPORTED:
-        return Binding::Failure::Unsupported;
+        return Semantic::Binding::Failure::Unsupported;
       case TTX_BINDING_PENDING:
-        return Binding::Failure::Pending;
+        return Semantic::Binding::Failure::Pending;
       default:
-        return Binding::Failure::Rejected;
+        return Semantic::Binding::Failure::Rejected;
       }
     }
 
@@ -160,12 +160,13 @@ class Abstract {
   // cannot stand in for this operation.
   template <typename Contract>
   auto bind() const -> Perimortem::Utility::
-      Result<typename Contract::Handle, Binding::Failure> {
+      Result<typename Contract::Handle, Semantic::Binding::Failure> {
     return get_interface().template bind<Contract>();
   }
 
   virtual auto bind_interface(Perimortem::System::Uuid requested) const
-      -> Perimortem::Utility::Result<Binding, Binding::Failure>;
+      -> Perimortem::Utility::
+          Result<Semantic::Binding, Semantic::Binding::Failure>;
 
   // Proves a native C++ base relationship without RTTI. These local tokens
   // remain separate from the UUIDs used to negotiate operation tables across

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/types/unsigned.hpp"
 #include "ttx/concept/unknown.hpp"
 #include "ttx/model/documentations/comment.hpp"
@@ -11,11 +11,11 @@
 namespace Tetrodotoxin::Library::Builtin::Enum {
 
 // Size is the Static immutable case count of one Enumeration.
-class Size : public Language::Model::Addressable {
+class Size : public Language::Model::Memory {
  public:
   static constexpr Perimortem::Core::View::Bytes name = "size"_view;
 
-  TTX_CONTRACT(Size, Language::Model::Addressable);
+  TTX_CONTRACT(Size, Language::Model::Memory);
 
   static auto create(
       Perimortem::Memory::Allocator::Arena& domain,

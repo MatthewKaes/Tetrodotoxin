@@ -28,8 +28,8 @@ class Bytes : public Tetrodotoxin::Library::Language::Constant {
 
   auto bind_interface(Perimortem::System::Uuid requested) const
       -> Perimortem::Utility::Result<
-          Ttx::Concept::Binding,
-          Ttx::Concept::Binding::Failure> override {
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override {
     using Contract = Tetrodotoxin::Library::Language::Value;
     if (requested != Contract::contract_id) {
       return Constant::bind_interface(requested);
@@ -45,7 +45,7 @@ class Bytes : public Tetrodotoxin::Library::Language::Constant {
       },
       [](const void*) -> Count { return 1; },
     };
-    return Ttx::Concept::Binding::provide<Contract>(this, operations);
+    return Ttx::Semantic::Binding::provide<Contract>(this, operations);
   }
 
   static auto create_authored(

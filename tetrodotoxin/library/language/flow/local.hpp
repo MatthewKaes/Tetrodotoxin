@@ -9,7 +9,7 @@
 
 #include "tetrodotoxin/library/language/constant.hpp"
 #include "tetrodotoxin/library/language/flow/block.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/pack.hpp"
 #include "tetrodotoxin/library/language/type_reference.hpp"
 #include "tetrodotoxin/library/language/writability.hpp"
@@ -25,9 +25,9 @@ namespace Tetrodotoxin::Library::Language::Flow {
 // declared Type receives the complete Pack Layout. Inference is deliberately
 // limited to one scalar output because a Local cannot silently materialize a
 // new aggregate Type for composed flow.
-class Local : public Model::Addressable {
+class Local : public Model::Memory {
  public:
-  TTX_CONTRACT(Local, Model::Addressable);
+  TTX_CONTRACT(Local, Model::Memory);
 
   static auto create_authored(
       Perimortem::Memory::Allocator::Arena& domain,

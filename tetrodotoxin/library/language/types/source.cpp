@@ -6,7 +6,7 @@
 #include "perimortem/core/diagnostics/log.hpp"
 
 #include "tetrodotoxin/language/import.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/callable.hpp"
 #include "tetrodotoxin/library/language/monograph.hpp"
 #include "ttx/concept/none.hpp"
@@ -278,7 +278,7 @@ auto Types::Source::retain_binding(
   BAIL_IF(!can_accept_definition());
 
   if (category == Category::Addressable) {
-    auto addressable = binding.select<Model::Addressable>();
+    auto addressable = binding.select<Model::Memory>();
     BAIL_IF(!addressable);
 
     // Source has no instance value. The retained Addressable declares whether

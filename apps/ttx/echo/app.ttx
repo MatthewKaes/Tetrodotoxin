@@ -10,7 +10,7 @@ private Main : alias = source("main.ttx");
 // configuration. It is not a resolved Runtime Package.
 //
 // Profiles:
-//   1. `Windowed`: Native window startup with System::Window and Vulkan support.
+//   1. `Windowed`: Native window startup with Platform::Window and Vulkan support.
 //   2. `Terminal`: Native terminal startup with standard input and output.
 //   3. `Headless`: Background startup without a presentation surface.
 runtime = Terminal {}

@@ -6,7 +6,7 @@
 
 #include "perimortem/core/perimortem.h"
 #include "perimortem/system/uuid.h"
-#include "ttx/concept/binding.h"
+#include "ttx/semantic/binding.h"
 #include "ttx/concept/documentation.h"
 
 #define TTX_ABSTRACT_ID_HIGH 0x01a08522d86b7decULL

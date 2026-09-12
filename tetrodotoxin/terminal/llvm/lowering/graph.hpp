@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "tetrodotoxin/library/language/model/addressable.hpp"
 #include "tetrodotoxin/library/language/model/callable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/monograph.hpp"
 #include "tetrodotoxin/terminal/llvm/module/program.hpp"
 

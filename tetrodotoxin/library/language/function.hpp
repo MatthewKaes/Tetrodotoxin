@@ -31,8 +31,8 @@ class Function : public Model::Callable {
 
   auto bind_interface(Perimortem::System::Uuid requested) const
       -> Perimortem::Utility::Result<
-          Ttx::Concept::Binding,
-          Ttx::Concept::Binding::Failure> override {
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override {
     if (requested == Tetrodotoxin::Language::Definition::contract_id) {
       return Tetrodotoxin::Language::Definition::provide(*this);
     }

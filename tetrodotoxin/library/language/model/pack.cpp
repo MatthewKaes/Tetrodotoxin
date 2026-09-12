@@ -560,7 +560,7 @@ auto Language::Model::Pack::fits_into(const Ttx::Model::Type& target) const
 }
 
 auto Language::Model::Pack::create_empty(
-    Memory::Allocator::Arena& domain,
+    Perimortem::Memory::Allocator::Arena& domain,
     Core::Option<Ttx::Lexical::Anchor> anchor) -> Pack& {
   return domain.construct<Group>(
       domain, Core::View::Vector<Ttx::Model::PackReference<Pack>>(),
@@ -568,7 +568,7 @@ auto Language::Model::Pack::create_empty(
 }
 
 auto Language::Model::Pack::create_group(
-    Memory::Allocator::Arena& domain,
+    Perimortem::Memory::Allocator::Arena& domain,
     Core::View::Vector<Ttx::Model::PackReference<Pack>> entries,
     Core::View::Vector<Core::View::Bytes> names,
     Core::Option<Ttx::Lexical::Anchor> anchor) -> Pack& {
@@ -576,7 +576,7 @@ auto Language::Model::Pack::create_group(
 }
 
 auto Language::Model::Pack::create_folded(
-    Memory::Allocator::Arena& domain,
+    Perimortem::Memory::Allocator::Arena& domain,
     Core::View::Vector<Ttx::Model::PackReference<Pack>> entries) -> Pack& {
   auto aggregate = Language::Constants::Aggregate::create(domain, entries);
   return aggregate ? static_cast<Pack&>(*aggregate)
@@ -584,7 +584,7 @@ auto Language::Model::Pack::create_folded(
 }
 
 auto Language::Model::Pack::create_completed(
-    Memory::Allocator::Arena& domain,
+    Perimortem::Memory::Allocator::Arena& domain,
     Core::View::Vector<Ttx::Model::PackReference<Pack>> entries,
     Core::View::Vector<Core::View::Bytes> names) -> Pack& {
   return domain.construct<Group>(

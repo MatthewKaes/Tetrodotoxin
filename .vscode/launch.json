@@ -2,6 +2,22 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "[TTX] Flow Tests (Linux)",
+      "type": "lldb",
+      "request": "launch",
+      "terminal": "integrated",
+      "program": "${workspaceFolder}/.bin/bin/validation/unit_tests/ttx/data/flow_tests",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "sourceMap": {
+        "/proc/self/cwd/": "${workspaceFolder}"
+      },
+      "initCommands": [
+        "command source '${workspaceFolder}/.vscode/perimortem.lldb'"
+      ],
+      "preLaunchTask": "TTX Flow Tests Build (Linux) [Debug]"
+    },
+    {
       "name": "[Tests] Perimortem (Linux)",
       "type": "lldb",
       "request": "launch",

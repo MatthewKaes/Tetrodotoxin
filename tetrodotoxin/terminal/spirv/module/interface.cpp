@@ -3,7 +3,7 @@
 
 #include "tetrodotoxin/terminal/spirv/module/interface.hpp"
 
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/render/language/attributes.hpp"
 #include "tetrodotoxin/render/language/stage.hpp"
 #include "tetrodotoxin/shader/language/binding.hpp"

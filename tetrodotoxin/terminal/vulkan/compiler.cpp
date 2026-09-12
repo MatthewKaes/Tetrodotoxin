@@ -8,7 +8,7 @@
 #include "perimortem/memory/managed/vector.hpp"
 
 #include "tetrodotoxin/library/language/function.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/types/real.hpp"
 #include "tetrodotoxin/library/language/model/types/value.hpp"
 #include "tetrodotoxin/library/language/types/structure.hpp"
@@ -174,8 +174,8 @@ auto Terminal::Vulkan::Compiler::describe(
         auto semantic = structure->get_layout().get_abstract(index);
         auto addressable =
             semantic
-                ? semantic->select<Library::Language::Model::Addressable>()
-                : Core::Option<const Library::Language::Model::Addressable&>();
+                ? semantic->select<Library::Language::Model::Memory>()
+                : Core::Option<const Library::Language::Model::Memory&>();
         auto type = addressable
                         ? select_type(*addressable)
                         : Core::Option<const Library::Language::Model::Type&>();

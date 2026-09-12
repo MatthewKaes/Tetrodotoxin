@@ -19,6 +19,7 @@
 
 using namespace Perimortem;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 
 static auto append_name(
     Serialization::Stream::Textual<Memory::Managed::Bytes>& output,

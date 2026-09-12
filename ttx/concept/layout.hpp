@@ -6,7 +6,7 @@
 #include "perimortem/system/uuid.hpp"
 
 #include "ttx/concept/abstract.hpp"
-#include "ttx/concept/bound.hpp"
+#include "ttx/semantic/bound.hpp"
 
 namespace Ttx::Concept {
 
@@ -32,7 +32,7 @@ class Layout {
         -> Perimortem::Core::Option<Perimortem::Core::View::Bytes>;
   };
 
-  class Handle : public Bound<Operations> {
+  class Handle : public Semantic::Bound<Operations> {
    public:
     using Bound::Bound;
 

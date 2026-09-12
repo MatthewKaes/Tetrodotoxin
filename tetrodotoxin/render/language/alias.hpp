@@ -28,8 +28,8 @@ class Alias : public Ttx::Concept::Abstract {
       -> void override;
   auto bind_interface(Perimortem::System::Uuid requested) const
       -> Perimortem::Utility::Result<
-          Ttx::Concept::Binding,
-          Ttx::Concept::Binding::Failure> override;
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override;
 
   static auto create(
       Perimortem::Memory::Allocator::Arena& domain,

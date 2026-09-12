@@ -4,6 +4,27 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "TTX Flow Tests Build (Linux) [Debug]",
+      "type": "process",
+      "command": "bazel",
+      "args": [
+        "build",
+        "//validation/unit_tests/ttx/data:flow_tests",
+        "--config=debug"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "group": "build",
+      "detail": "Builds the focused TTX Flow tests and both C providers for debugging.",
+      "presentation": {
+        "clear": true
+      }
+    },
+    {
       "label": "Puffer SDK Build (Linux) [Debug]",
       "type": "shell",
       "command": "${workspaceFolder}/puffer/package.sh",

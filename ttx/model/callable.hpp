@@ -6,8 +6,8 @@
 #include "perimortem/system/uuid.hpp"
 
 #include "ttx/concept/abstract.hpp"
-#include "ttx/concept/bound.hpp"
 #include "ttx/concept/layout.hpp"
+#include "ttx/semantic/bound.hpp"
 
 namespace Ttx::Model {
 
@@ -30,7 +30,7 @@ class Callable : public Concept::Abstract {
     auto (*get_results)(const void*) -> Concept::Layout::Handle;
   };
 
-  class Handle : public Concept::Bound<Operations> {
+  class Handle : public Semantic::Bound<Operations> {
    public:
     using Bound::Bound;
 
@@ -44,7 +44,7 @@ class Callable : public Concept::Abstract {
   };
 
   auto bind_interface(Perimortem::System::Uuid requested) const -> Perimortem::
-      Utility::Result<Concept::Binding, Concept::Binding::Failure> override;
+      Utility::Result<Semantic::Binding, Semantic::Binding::Failure> override;
 
   virtual constexpr auto get_parameters() const -> const Concept::Layout& = 0;
   virtual constexpr auto get_results() const -> const Concept::Layout& = 0;

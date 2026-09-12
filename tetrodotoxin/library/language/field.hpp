@@ -9,10 +9,11 @@
 
 #include "tetrodotoxin/language/definition.hpp"
 #include "tetrodotoxin/library/language/constant.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/pack.hpp"
 #include "tetrodotoxin/library/language/type_reference.hpp"
 #include "tetrodotoxin/library/language/writability.hpp"
+#include "tetrodotoxin/source/declaration.hpp"
 #include "ttx/concept/reference.hpp"
 #include "ttx/lexical/anchor.hpp"
 #include "ttx/lexical/cursor.hpp"
@@ -25,7 +26,7 @@ namespace Tetrodotoxin::Library::Language {
 // TTX Addressable contract. An initializer remains its real Pack: declared
 // Fields receive the complete flow through Layout fitting, while inference
 // accepts only one scalar output and retains that exact Type.
-class Field : public Model::Addressable {
+class Field : public Model::Memory {
  private:
   constexpr Field(
       Perimortem::Memory::Allocator::Arena& domain,
@@ -46,12 +47,15 @@ class Field : public Model::Addressable {
         initializer_linked(!initializer) {}
 
  public:
-  TTX_CONTRACT(Field, Model::Addressable);
+  TTX_CONTRACT(Field, Model::Memory);
 
   auto bind_interface(Perimortem::System::Uuid requested) const
       -> Perimortem::Utility::Result<
-          Ttx::Concept::Binding,
-          Ttx::Concept::Binding::Failure> override {
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override {
+    if (requested == Tetrodotoxin::Source::Declaration::contract_id) {
+      return Tetrodotoxin::Source::Declaration::provide(*this);
+    }
     if (requested == Tetrodotoxin::Language::Definition::contract_id) {
       return Tetrodotoxin::Language::Definition::provide(*this);
     }
@@ -65,10 +69,10 @@ class Field : public Model::Addressable {
           return field.get_type().get_interface();
         },
       };
-      return Ttx::Concept::Binding::provide<Ttx::Model::Addressable>(
+      return Ttx::Semantic::Binding::provide<Ttx::Model::Addressable>(
           this, operations);
     }
-    return Model::Addressable::bind_interface(requested);
+    return Model::Memory::bind_interface(requested);
   }
 
   // Source interpretation supplies the declaration facts it could establish
@@ -108,32 +112,29 @@ class Field : public Model::Addressable {
   // one real initializer edge without reparsing or copying the expression.
   auto retain_generated_initializer(const Field& requirement) -> Bool;
 
-  auto link_declaration_type(Ttx::Lexical::Cursor& cursor) -> Bool override;
+  auto link_declaration_type(Ttx::Lexical::Cursor& cursor) -> Bool;
 
-  auto link_inferred_declaration_type(Ttx::Lexical::Cursor& cursor)
-      -> Bool override;
+  auto link_inferred_declaration_type(Ttx::Lexical::Cursor& cursor) -> Bool;
 
   Field(const Field&) = delete;
   Field(Field&&) = delete;
   auto operator=(const Field&) -> Field& = delete;
   auto operator=(Field&&) -> Field& = delete;
 
-  auto link_declaration_initializer(Ttx::Lexical::Cursor& cursor)
-      -> Bool override;
+  auto link_declaration_initializer(Ttx::Lexical::Cursor& cursor) -> Bool;
 
-  auto link_restored_declaration_type() -> Bool override;
+  auto link_restored_declaration_type() -> Bool;
 
-  auto link_restored_declaration_initializer() -> Bool override;
+  auto link_restored_declaration_initializer() -> Bool;
 
   // Const completion is a required link barrier. The initializer must reduce
   // to one exact constant Pack before any body can consume this Field.
-  auto link_declaration_constant(Ttx::Lexical::Cursor& cursor) const
-      -> Bool override;
+  auto link_declaration_constant(Ttx::Lexical::Cursor& cursor) const -> Bool;
 
   // Finalization visits the real initializer Pack after linking has frozen
   // its output Layout. Field remains the declaration owner. No Expression
   // side inventory is required merely to cache constant producers.
-  auto finalize_declaration(Ttx::Lexical::Cursor& cursor) -> Bool override;
+  auto finalize_declaration(Ttx::Lexical::Cursor& cursor) -> Bool;
 
   constexpr auto contributes_to_instance_layout() const -> Bool override {
     return writability == Writability::Internal;
@@ -168,7 +169,7 @@ class Field : public Model::Addressable {
   }
 
   constexpr auto get_declaration_anchor() const
-      -> Perimortem::Core::Option<Ttx::Lexical::Anchor> override {
+      -> Perimortem::Core::Option<Ttx::Lexical::Anchor> {
     return definition.get_declaration_anchor();
   }
 
@@ -216,6 +217,19 @@ class Field : public Model::Addressable {
   }
 
  private:
+  friend class Tetrodotoxin::Source::Declaration;
+  auto get_domain() const -> Ttx::Concept::Domain::Answer override {
+    if (type_reference) {
+      return type_reference->get_interface();
+    }
+    return Model::Memory::get_domain();
+  }
+
+  auto complete_source(
+      Tetrodotoxin::Source::Declaration::Phase phase,
+      Ttx::Lexical::Cursor* cursor)
+      -> Tetrodotoxin::Source::Declaration::Completion;
+
   enum class ConstantState : U8 {
     Unresolved,
     Folding,

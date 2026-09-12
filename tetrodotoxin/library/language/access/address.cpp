@@ -28,9 +28,9 @@ auto Language::Access::Address::create_authored(
 auto Language::Access::Address::create_synthetic(
     Memory::Allocator::Arena& domain,
     Model::Pack& receiver,
-    const Language::Model::Addressable& selected) -> Address& {
-  Core::Option<Reference<const Language::Model::Addressable>> addressable{
-    Reference<const Language::Model::Addressable>(selected),
+    const Language::Model::Memory& selected) -> Address& {
+  Core::Option<Reference<const Language::Model::Memory>> addressable{
+    Reference<const Language::Model::Memory>(selected),
   };
   return Expression::create_synthetic<Address>(
       domain, [&](auto source) -> Address {
@@ -66,7 +66,7 @@ auto Language::Access::Address::link(
                            : receiver.resolve_concept("static"_view)
                                  .resolve_concept(name);
       });
-  auto selected = candidate.resolve().select<Language::Model::Addressable>();
+  auto selected = candidate.resolve().select<Language::Model::Memory>();
 
   if (!selected) {
     auto report = cursor.create_report(source_anchor);
@@ -107,7 +107,7 @@ auto Language::Access::Address::link(
     return False;
   }
 
-  addressable = Reference<const Language::Model::Addressable>(*selected);
+  addressable = Reference<const Language::Model::Memory>(*selected);
   if (source_anchor) {
     cursor.get_associations().create(*source_anchor, *selected);
   }
@@ -118,7 +118,7 @@ auto Language::Access::Address::get_documentation() const
     -> const Documentation& {
   return addressable.visit(
       []() -> const Documentation& { return Documentation::get_empty(); },
-      [](const Reference<const Language::Model::Addressable>& selected)
+      [](const Reference<const Language::Model::Memory>& selected)
           -> const Documentation& {
         return selected.get().get_documentation();
       });
@@ -127,14 +127,14 @@ auto Language::Access::Address::get_documentation() const
 auto Language::Access::Address::get_type() const -> const Abstract& {
   return addressable.visit(
       []() -> const Abstract& { return Unknown::get_unknown(); },
-      [](const Reference<const Language::Model::Addressable>& selected)
+      [](const Reference<const Language::Model::Memory>& selected)
           -> const Abstract& { return selected.get().get_type(); });
 }
 
 auto Language::Access::Address::get_result() const -> const Abstract& {
   return addressable.visit(
       []() -> const Abstract& { return Unknown::get_unknown(); },
-      [](const Reference<const Language::Model::Addressable>& selected)
+      [](const Reference<const Language::Model::Memory>& selected)
           -> const Abstract& { return selected.get(); });
 }
 

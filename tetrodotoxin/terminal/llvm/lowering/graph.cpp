@@ -130,7 +130,7 @@ static auto reserve_type(
     }
     for (const Ttx::Concept::Reference<Ttx::Concept::Abstract>& candidate :
          composite->get_addressables()) {
-      auto addressable = candidate.get().select<Model::Addressable>();
+      auto addressable = candidate.get().select<Model::Memory>();
       BAIL_IF(addressable && !reserve_addressable(program, *addressable));
     }
   }
@@ -183,7 +183,7 @@ static auto complete_type(
     }
     for (const Ttx::Concept::Reference<Ttx::Concept::Abstract>& candidate :
          composite->get_addressables()) {
-      auto addressable = candidate.get().select<Model::Addressable>();
+      auto addressable = candidate.get().select<Model::Memory>();
       BAIL_IF(addressable && !complete_addressable(program, *addressable));
     }
   }
@@ -313,7 +313,7 @@ static auto emit_type(
     for (const Ttx::Concept::Reference<Ttx::Concept::Abstract>& declaration :
          composite->get_declarations()) {
       auto nested = declaration.get().select<Model::Type>();
-      auto addressable = declaration.get().select<Model::Addressable>();
+      auto addressable = declaration.get().select<Model::Memory>();
       auto callable = declaration.get().select<Model::Callable>();
       if (nested && !emit_type(program, *nested, excluded)) {
         return False;

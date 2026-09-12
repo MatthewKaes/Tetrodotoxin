@@ -70,6 +70,11 @@ class Expression : public Ttx::Concept::Abstract, public Model::Pack {
 
   TTX_CONTRACT(Expression, Ttx::Concept::Abstract);
 
+  auto bind_interface(Perimortem::System::Uuid requested) const
+      -> Perimortem::Utility::Result<
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override;
+
   // The folded route reports available immutable evaluation. Access operators
   // own receiver traversal and never use this as an implicit member lookup
   // path.

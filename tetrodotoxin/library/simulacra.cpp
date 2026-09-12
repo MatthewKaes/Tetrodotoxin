@@ -5,6 +5,7 @@
 
 using namespace Perimortem::Core;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 using namespace Tetrodotoxin::Library;
 
 auto Simulacra::Handle::project(Abstract::Handle candidate) const

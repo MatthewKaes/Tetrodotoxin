@@ -24,9 +24,9 @@ class Unknown : public Abstract {
   TTX_NAME("Unknown"_view);
   TTX_EMPTY_DOCUMENTATION();
 
-  auto bind_interface(Perimortem::System::Uuid requested) const
-      -> Perimortem::Utility::Result<Binding, Binding::Failure> override {
-    return Binding::Failure::Pending;
+  auto bind_interface(Perimortem::System::Uuid requested) const -> Perimortem::
+      Utility::Result<Semantic::Binding, Semantic::Binding::Failure> override {
+    return Semantic::Binding::Failure::Pending;
   }
 
   constexpr auto resolve() const -> const Abstract& override { return *this; }

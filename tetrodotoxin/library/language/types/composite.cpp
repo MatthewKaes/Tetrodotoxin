@@ -8,8 +8,8 @@
 #include "tetrodotoxin/library/language/alias.hpp"
 #include "tetrodotoxin/library/language/field.hpp"
 #include "tetrodotoxin/library/language/function.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
 #include "tetrodotoxin/library/language/model/callable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/types/enumeration.hpp"
 #include "tetrodotoxin/library/language/types/object.hpp"
 #include "tetrodotoxin/library/language/types/structure.hpp"
@@ -20,6 +20,7 @@ using namespace Perimortem::Core;
 using namespace Perimortem::Memory;
 using namespace Perimortem::Utility;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 using namespace Ttx::Lexical;
 using namespace Tetrodotoxin::Library::Language;
 
@@ -68,8 +69,48 @@ static auto declaration_offset(const Option<const selected_type&>& selected)
     return Count(-1);
   }
 
-  auto anchor = selected->get_declaration_anchor();
+  Option<Anchor> anchor;
+  selected->template bind<Tetrodotoxin::Source::Declaration>().visit(
+      [&](const Tetrodotoxin::Source::Declaration::Handle& declaration) {
+        anchor = declaration.get_anchor();
+      },
+      [](Binding::Failure) {});
   return anchor ? Count(anchor->get_span().get_offset()) : Count(-1);
+}
+
+// Source barriers apply to the declaration's published completion service.
+// A generated value may have no source work, while Pending or Rejected must
+// stop the barrier instead of selecting another path to the same object.
+static auto complete_declaration(
+    Abstract::Handle subject,
+    Tetrodotoxin::Source::Declaration::Phase phase,
+    Cursor* cursor = nullptr) -> Bool {
+  Bool succeeded = True;
+  subject.bind<Tetrodotoxin::Source::Declaration>().visit(
+      [&](const Tetrodotoxin::Source::Declaration::Handle& declaration) {
+        declaration.complete(phase, cursor)
+            .visit(
+                [&](Bool completed) { succeeded &= completed; },
+                [&](Binding::Failure) { succeeded = False; });
+      },
+      [&](Binding::Failure failure) {
+        if (failure != Binding::Failure::Unsupported) {
+          succeeded = False;
+        }
+      });
+  return succeeded;
+}
+
+static auto complete_declarations(
+    View::Vector<Reference<Abstract>> declarations,
+    Tetrodotoxin::Source::Declaration::Phase phase,
+    Cursor* cursor = nullptr) -> Bool {
+  Bool succeeded = True;
+  for (const auto& subject : declarations) {
+    succeeded &=
+        complete_declaration(subject.get().get_interface(), phase, cursor);
+  }
+  return succeeded;
 }
 
 Types::Composite::Composite(
@@ -145,7 +186,7 @@ auto Types::Composite::can_bind_definition(
                                      : static_authority.can_bind(binding);
   }
   case Category::Addressable: {
-    auto addressable = binding.select<Model::Addressable>();
+    auto addressable = binding.select<Model::Memory>();
     BAIL_IF(!addressable);
     return addressable->contributes_to_instance_layout()
                ? instance_authority.can_bind(binding)
@@ -191,7 +232,7 @@ auto Types::Composite::publish_binding(
     break;
   }
   case Category::Addressable: {
-    auto addressable = binding.select<Model::Addressable>();
+    auto addressable = binding.select<Model::Memory>();
     BAIL_IF(!addressable);
     bound = addressable->contributes_to_instance_layout()
                 ? instance_authority.bind(binding, published)
@@ -322,18 +363,16 @@ auto Types::Composite::link_fields(Cursor& cursor) -> Bool {
   // Authored Type routes settle without evaluating initializers. Completing
   // those declarations first gives inference every exact Type while each
   // Addressable decides whether it owns an authored route.
-  failed |= !visit_each<Model::Addressable>(
-      addressables.get_view(), [&](Model::Addressable& addressable) {
-        return addressable.link_declaration_type(cursor);
-      });
+  failed |= !complete_declarations(
+      addressables.get_view(), Tetrodotoxin::Source::Declaration::Phase::Type,
+      &cursor);
 
   // Explicit declarations are now safe lookup targets. Each inferred owner
   // then authenticates its final context, while only completed candidates
   // become visible to later inference.
-  failed |= !visit_each<Model::Addressable>(
-      addressables.get_view(), [&](Model::Addressable& addressable) {
-        return addressable.link_inferred_declaration_type(cursor);
-      });
+  failed |= !complete_declarations(
+      addressables.get_view(),
+      Tetrodotoxin::Source::Declaration::Phase::InferredType, &cursor);
 
   BAIL_IF(failed);
 
@@ -380,7 +419,7 @@ auto Types::Composite::complete_field_layout() -> void {
   Managed::Vector<Reference<const Abstract>> fields(domain);
   fields.reset(addressables.get_size());
   for (const Reference<Abstract>& binding : addressables.get_view()) {
-    auto addressable = binding.get().select<Model::Addressable>();
+    auto addressable = binding.get().select<Model::Memory>();
     if (addressable && addressable->contributes_to_instance_layout()) {
       fields.insert(*addressable);
     }
@@ -405,20 +444,18 @@ auto Types::Composite::link_initializers(Cursor& cursor) -> Bool {
   Bool failed = !visit_each<Model::Type>(
       types.get_view(),
       [&](Model::Type& type) { return type.link_initializers(cursor); });
-  failed |= !visit_each<Model::Addressable>(
-      addressables.get_view(), [&](Model::Addressable& addressable) {
-        return addressable.link_declaration_initializer(cursor);
-      });
+  failed |= !complete_declarations(
+      addressables.get_view(),
+      Tetrodotoxin::Source::Declaration::Phase::Initializer, &cursor);
 
   BAIL_IF(failed);
 
   // Every initializer Expression is linked before const folding begins. A
   // const declaration may therefore depend on any other acyclic const
   // declaration in this Composite without source order becoming semantic.
-  failed |= !visit_each<Model::Addressable>(
-      addressables.get_view(), [&](Model::Addressable& addressable) {
-        return addressable.link_declaration_constant(cursor);
-      });
+  failed |= !complete_declarations(
+      addressables.get_view(),
+      Tetrodotoxin::Source::Declaration::Phase::Constant, &cursor);
 
   BAIL_IF(failed);
 
@@ -442,10 +479,9 @@ auto Types::Composite::link_callable_signatures(Cursor& cursor) -> Bool {
   Bool failed = !visit_each<Model::Type>(
       types.get_view(),
       [&](Model::Type& type) { return type.link_callable_signatures(cursor); });
-  failed |= !visit_each<Model::Callable>(
-      get_callable_bindings(), [&](Model::Callable& callable) {
-        return callable.link_declaration_signature(cursor);
-      });
+  failed |= !complete_declarations(
+      get_callable_bindings(),
+      Tetrodotoxin::Source::Declaration::Phase::Signature, &cursor);
 
   BAIL_IF(failed);
 
@@ -469,10 +505,9 @@ auto Types::Composite::link_callable_bodies(Cursor& cursor) -> Bool {
   Bool failed = !visit_each<Model::Type>(
       types.get_view(),
       [&](Model::Type& type) { return type.link_callable_bodies(cursor); });
-  failed |= !visit_each<Model::Callable>(
-      get_callable_bindings(), [&](Model::Callable& callable) {
-        return callable.link_declaration_body(cursor);
-      });
+  failed |= !complete_declarations(
+      get_callable_bindings(), Tetrodotoxin::Source::Declaration::Phase::Body,
+      &cursor);
 
   BAIL_IF(failed);
 
@@ -496,17 +531,15 @@ auto Types::Composite::finalize(Cursor& cursor) -> Bool {
       types.get_view(),
       [&](Model::Type& type) { return type.finalize(cursor); });
 
-  failed |= !visit_each<Model::Addressable>(
-      addressables.get_view(), [&](Model::Addressable& addressable) {
-        return addressable.finalize_declaration(cursor);
-      });
+  failed |= !complete_declarations(
+      addressables.get_view(),
+      Tetrodotoxin::Source::Declaration::Phase::Finalize, &cursor);
 
   // Callable folding still runs when publication fails. Independent cache and
   // diagnostic facts therefore remain observable without admitting the Type.
-  failed |= !visit_each<Model::Callable>(
-      get_callable_bindings(), [&](Model::Callable& callable) {
-        return callable.finalize_declaration(cursor);
-      });
+  failed |= !complete_declarations(
+      get_callable_bindings(),
+      Tetrodotoxin::Source::Declaration::Phase::Finalize, &cursor);
 
   BAIL_IF(failed);
 
@@ -543,10 +576,9 @@ auto Types::Composite::link_restored_callable_signatures() -> Bool {
   BAIL_IF(!visit_each<Model::Type>(types.get_view(), [](Model::Type& type) {
     return type.link_restored_callable_signatures();
   }));
-  BAIL_IF(!visit_each<Model::Callable>(
-      get_callable_bindings(), [](Model::Callable& callable) {
-        return callable.link_restored_declaration_signature();
-      }));
+  BAIL_IF(!complete_declarations(
+      get_callable_bindings(),
+      Tetrodotoxin::Source::Declaration::Phase::RestoredSignature));
 
   stage = Stage::CallableSignaturesLinked;
   return True;
@@ -561,10 +593,9 @@ auto Types::Composite::link_restored_fields() -> Bool {
   BAIL_IF(!visit_each<Model::Type>(types.get_view(), [](Model::Type& type) {
     return type.link_restored_fields();
   }));
-  BAIL_IF(!visit_each<Model::Addressable>(
-      addressables.get_view(), [](Model::Addressable& addressable) {
-        return addressable.link_restored_declaration_type();
-      }));
+  BAIL_IF(!complete_declarations(
+      addressables.get_view(),
+      Tetrodotoxin::Source::Declaration::Phase::RestoredType));
 
   complete_field_layout();
   stage = Stage::FieldsLinked;
@@ -588,11 +619,12 @@ auto Types::Composite::link_restored_initializers() -> Bool {
   }
 
   for (const Reference<Abstract>& binding : addressables.get_view()) {
-    auto addressable = binding.get().select<Model::Addressable>();
-    if (addressable && !addressable->link_restored_declaration_initializer()) {
+    if (!complete_declaration(
+            binding.get().get_interface(),
+            Tetrodotoxin::Source::Declaration::Phase::RestoredInitializer)) {
       Diagnostics::Log::Message<256> message(Diagnostics::Log::Level::Error);
       message << "Restored Addressable initializer failed for '"_view
-              << addressable->get_name() << "'."_view;
+              << binding.get().get_name() << "'."_view;
       return False;
     }
   }
@@ -637,8 +669,7 @@ auto Types::Composite::resolve_binding(
   }
   switch (category) {
   case Category::Addressable:
-    return selected.is<Model::Addressable>() ? selected
-                                             : Unknown::get_unknown();
+    return selected.is<Model::Memory>() ? selected : Unknown::get_unknown();
   case Category::Callable:
     return selected.is<Model::Callable>() ? selected : Unknown::get_unknown();
   case Category::Type:

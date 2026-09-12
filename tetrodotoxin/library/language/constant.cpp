@@ -3,11 +3,28 @@
 
 #include "tetrodotoxin/library/language/constant.hpp"
 
+#include "ttx/concept/domain.hpp"
 #include "ttx/concept/unknown.hpp"
 
 using namespace Perimortem;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 using namespace Tetrodotoxin::Library;
+
+auto Language::Constant::bind_interface(Perimortem::System::Uuid requested)
+    const -> Utility::Result<Binding, Binding::Failure> {
+  if (requested == Domain::contract_id) {
+    static const Domain::Operations operations = {
+      [](const void* source, ttx_abstract* result) -> ttx_binding_status {
+        const auto& value = *static_cast<const Constant*>(source);
+        *result = value.get_type().get_interface().get_abi();
+        return TTX_BINDING_SATISFIED;
+      },
+    };
+    return Binding::provide<Domain>(this, operations);
+  }
+  return Ttx::Concept::Constant::bind_interface(requested);
+}
 
 auto Language::Constant::get_value_type(Count index) const
     -> const Ttx::Concept::Abstract& {

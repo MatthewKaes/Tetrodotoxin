@@ -25,6 +25,11 @@ class Constant : public Ttx::Concept::Constant, public Model::Pack {
  public:
   TTX_CONTRACT(Constant, Ttx::Concept::Constant);
 
+  auto bind_interface(Perimortem::System::Uuid requested) const
+      -> Perimortem::Utility::Result<
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override;
+
   // Concrete Constant domains override this with the canonical spelling of
   // the fact they represent. The Type name remains only a safe fallback for
   // external Constant domains that have not selected a value spelling.

@@ -37,7 +37,7 @@ class Addressable : public Ttx::Model::Addressable {
   TTX_EMPTY_DOCUMENTATION();
 
   auto bind_interface(Perimortem::System::Uuid requested) const -> Perimortem::
-      Utility::Result<Concept::Binding, Concept::Binding::Failure> override {
+      Utility::Result<Semantic::Binding, Semantic::Binding::Failure> override {
     using Contract = Ttx::Model::Addressable;
     if (requested != Contract::contract_id) {
       return Contract::bind_interface(requested);
@@ -47,7 +47,7 @@ class Addressable : public Ttx::Model::Addressable {
         return static_cast<const Addressable*>(provider)->source;
       },
     };
-    return Concept::Binding::provide<Contract>(this, operations);
+    return Semantic::Binding::provide<Contract>(this, operations);
   }
 
   constexpr auto get_type() const -> const Ttx::Model::Type& override {

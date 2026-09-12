@@ -8,7 +8,7 @@
 #include "perimortem/memory/allocator/arena.hpp"
 
 #include "tetrodotoxin/library/language/expression.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "ttx/concept/reference.hpp"
 #include "ttx/lexical/cursor.hpp"
 
@@ -31,7 +31,7 @@ class Address : public Expression {
   static auto create_synthetic(
       Perimortem::Memory::Allocator::Arena& domain,
       Model::Pack& receiver,
-      const Model::Addressable& addressable) -> Address&;
+      const Model::Memory& addressable) -> Address&;
 
   auto link(
       Ttx::Lexical::Cursor& cursor,
@@ -58,7 +58,7 @@ class Address : public Expression {
       Ttx::Lexical::Token name_token,
       Perimortem::Core::View::Bytes name,
       Perimortem::Core::Option<
-          Ttx::Concept::Reference<const Model::Addressable>> addressable,
+          Ttx::Concept::Reference<const Model::Memory>> addressable,
       Perimortem::Core::Option<Ttx::Lexical::Anchor> anchor)
       : Expression(anchor),
         receiver(receiver),
@@ -69,7 +69,7 @@ class Address : public Expression {
   Model::Pack& receiver;
   Ttx::Lexical::Token name_token;
   Perimortem::Core::View::Bytes name;
-  Perimortem::Core::Option<Ttx::Concept::Reference<const Model::Addressable>>
+  Perimortem::Core::Option<Ttx::Concept::Reference<const Model::Memory>>
       addressable;
 };
 

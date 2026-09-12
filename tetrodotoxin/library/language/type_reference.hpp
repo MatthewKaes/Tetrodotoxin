@@ -13,6 +13,7 @@
 #include "tetrodotoxin/language/import.hpp"
 #include "tetrodotoxin/library/language/generic.hpp"
 #include "ttx/concept/abstract.hpp"
+#include "ttx/concept/domain.hpp"
 #include "ttx/lexical/anchor.hpp"
 #include "ttx/lexical/cursor.hpp"
 
@@ -40,7 +41,7 @@ class TypeReference {
   // resolve operations below return the native answer needed for compilation.
   auto get_interface() const -> Ttx::Concept::Abstract::Handle;
   auto bind_interface(Perimortem::System::Uuid requested) const -> Perimortem::
-      Utility::Result<Ttx::Concept::Binding, Ttx::Concept::Binding::Failure>;
+      Utility::Result<Ttx::Semantic::Binding, Ttx::Semantic::Binding::Failure>;
   auto resolve_concept(Perimortem::Core::View::Bytes name) const
       -> const Ttx::Concept::Abstract&;
   auto visit_concepts(Ttx::Concept::Abstract::Visitor visitor) const -> void;
@@ -161,6 +162,9 @@ class TypeReference {
       -> void;
 
  private:
+  friend class Ttx::Concept::Domain;
+  auto get_domain() const -> Ttx::Concept::Domain::Answer;
+
   enum class Root : U8 {
     Context,
     Lexical,
@@ -186,6 +190,11 @@ class TypeReference {
   mutable Perimortem::Core::Option<Tetrodotoxin::Language::Import::Handle>
       dependency;
   mutable Count dependency_suffix = 0;
+  // Domain is negotiated through the supplying subject before this reference
+  // adds its retained access path. Keeping that selected interface avoids
+  // negotiating again on every observation. The source owner keeps its
+  // selection and lifetime valid with the committed relationship.
+  mutable Perimortem::Core::Option<Ttx::Concept::Domain::Handle> domain;
   // Two imports can select the same native Type while answering differently.
   // A completed reference commits both identities so revisiting its route
   // cannot silently exchange the policy behind a previously borrowed view.

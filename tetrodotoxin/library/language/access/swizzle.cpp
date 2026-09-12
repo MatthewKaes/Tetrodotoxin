@@ -4,7 +4,7 @@
 #include "tetrodotoxin/library/language/access/swizzle.hpp"
 
 #include "tetrodotoxin/library/language/access/address.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "ttx/concept/unknown.hpp"
 #include "ttx/model/layouts/fluid.hpp"
 #include "ttx/model/layouts/named.hpp"
@@ -200,7 +200,7 @@ auto Language::Access::Swizzle::link(
     for (Core::View::Bytes name : names) {
       auto candidate = instance.resolve_concept(name)
                            .resolve()
-                           .select<Language::Model::Addressable>();
+                           .select<Language::Model::Memory>();
       if (!candidate) {
         cursor.create_expression_error(
             get_anchor(),
@@ -258,8 +258,8 @@ auto Language::Access::Swizzle::link(
     // not copied Field identities or an aggregate result carrier.
     Expression& selected_receiver = *receiver_expression;
     for (const Reference<const Abstract>& candidate : candidates.get_view()) {
-      const Language::Model::Addressable& addressable =
-          static_cast<const Language::Model::Addressable&>(candidate.get());
+      const Language::Model::Memory& addressable =
+          static_cast<const Language::Model::Memory&>(candidate.get());
       Address& projection =
           Address::create_synthetic(domain, selected_receiver, addressable);
       BAIL_IF(!projection.link(cursor, lexical_context, access_scope));

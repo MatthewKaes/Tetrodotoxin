@@ -9,19 +9,20 @@
 
 namespace Perimortem::Memory::Const {
 
-// Supplies a consteval Vector that can be used for managing state for constexpr
-// evaluation. Use the Dynamic or Managed variant for runtime support.
+// Owns temporary array storage in constant evaluation or at runtime. Using
+// the same lifetime rules in both cases lets algorithms share their working
+// storage without exposing a separate allocation policy to each caller.
 template <typename type>
 class Vector {
  public:
-  consteval Vector() = default;
+  constexpr Vector() = default;
   constexpr ~Vector() {
     if (source_block) {
       delete[] source_block;
     }
   }
 
-  consteval Vector(const Vector& rhs) {
+  constexpr Vector(const Vector& rhs) {
     if (rhs.is_empty()) {
       return;
     }
@@ -33,13 +34,13 @@ class Vector {
     }
   }
 
-  consteval Vector(Vector&& rhs) {
+  constexpr Vector(Vector&& rhs) {
     Perimortem::Core::Data::swap(source_block, rhs.source_block);
     Perimortem::Core::Data::swap(size, rhs.size);
     Perimortem::Core::Data::swap(capacity, rhs.capacity);
   }
 
-  consteval auto operator=(const Vector& rhs) -> Vector& {
+  constexpr auto operator=(const Vector& rhs) -> Vector& {
     if (this == &rhs) {
       return *this;
     }
@@ -54,13 +55,13 @@ class Vector {
     return *this;
   };
 
-  consteval auto insert(type value) -> type& {
+  constexpr auto insert(type value) -> type& {
     ensure_capacity(get_size() + 1);
     source_block[size] = static_cast<type&&>(value);
     return source_block[size++];
   }
 
-  consteval auto remove(Count index) -> Bool {
+  constexpr auto remove(Count index) -> Bool {
     if (index >= size) {
       return False;
     }
@@ -74,7 +75,7 @@ class Vector {
     return True;
   }
 
-  consteval auto remove_stable(Count index) -> Bool {
+  constexpr auto remove_stable(Count index) -> Bool {
     if (index >= size) {
       return False;
     }
@@ -89,42 +90,42 @@ class Vector {
     return True;
   }
 
-  consteval auto resize(Count new_size) -> void {
+  constexpr auto resize(Count new_size) -> void {
     ensure_capacity(new_size);
     size = new_size;
   }
-  consteval auto contains(const type& data) const -> Bool {
+  constexpr auto contains(const type& data) const -> Bool {
     return get_view().contains(data);
   }
 
-  consteval auto at(Count index) const -> const type& {
+  constexpr auto at(Count index) const -> const type& {
     return source_block[index];
   }
 
-  consteval auto at(Count index) -> type& { return source_block[index]; }
-  consteval auto operator[](Count index) const -> const type& {
+  constexpr auto at(Count index) -> type& { return source_block[index]; }
+  constexpr auto operator[](Count index) const -> const type& {
     return at(index);
   }
 
-  consteval auto operator[](Count index) -> type& { return at(index); }
+  constexpr auto operator[](Count index) -> type& { return at(index); }
 
-  consteval operator Core::View::Vector<type>() const { return get_view(); }
+  constexpr operator Core::View::Vector<type>() const { return get_view(); }
 
-  consteval auto get_size() const -> Count { return size; }
-  consteval auto get_capacity() const -> Count { return capacity; }
-  consteval auto get_view() const -> const Core::View::Vector<type> {
+  constexpr auto get_size() const -> Count { return size; }
+  constexpr auto get_capacity() const -> Count { return capacity; }
+  constexpr auto get_view() const -> const Core::View::Vector<type> {
     return Core::View::Vector<type>(source_block, get_size());
   }
 
-  consteval auto get_data() const -> const type* { return source_block; }
-  consteval auto get_data() -> type* { return source_block; }
+  constexpr auto get_data() const -> const type* { return source_block; }
+  constexpr auto get_data() -> type* { return source_block; }
 
-  consteval auto is_empty() const -> Bool { return get_size() == 0; }
+  constexpr auto is_empty() const -> Bool { return get_size() == 0; }
 
  private:
   // Ensures there is _at least_ enough room for the requested number of
   // objects.
-  consteval auto ensure_capacity(Count required_size) -> void {
+  constexpr auto ensure_capacity(Count required_size) -> void {
     // Check if we can already fit required buffer.
     if (required_size <= get_capacity()) {
       return;
@@ -138,7 +139,7 @@ class Vector {
     auto* new_block = new type[new_capacity]{};
     if (source_block) {
       for (Count i = 0; i < size; i++) {
-        new_block[i] = source_block[i];
+        new_block[i] = static_cast<type&&>(source_block[i]);
       }
 
       delete[] source_block;

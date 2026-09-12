@@ -16,9 +16,9 @@ using namespace Ttx::Lexical;
 using namespace Ttx::Model;
 using namespace Tetrodotoxin::Library;
 
-class Payload final : public Language::Model::Addressable {
+class Payload final : public Language::Model::Memory {
  public:
-  TTX_CONTRACT(Payload, Language::Model::Addressable);
+  TTX_CONTRACT(Payload, Language::Model::Memory);
 
   constexpr Payload(View::Bytes name) : name(name) {}
 
@@ -91,13 +91,13 @@ auto Language::Flow::Match::create_pattern(
 auto Language::Flow::Match::retain_value_case(
     Model::Pack& value,
     Block& body,
-    Model::Addressable& payload,
+    Model::Memory& payload,
     Anchor anchor) -> void {
   cases.insert({
     .kind = CaseKind::Value,
     .value = Ttx::Model::PackReference<Model::Pack>(value),
     .body = Reference<Block>(body),
-    .payload = Reference<Model::Addressable>(payload),
+    .payload = Reference<Model::Memory>(payload),
     .anchor = anchor,
     .constant = {},
   });
@@ -406,15 +406,15 @@ auto Language::Flow::Match::get_case_kind(Count index) const
 }
 
 auto Language::Flow::Match::get_case_payload(Count index) const
-    -> Option<const Language::Model::Addressable&> {
+    -> Option<const Language::Model::Memory&> {
   if (index >= cases.get_size()) {
     return {};
   }
 
   return cases.get_view().get_data()[index].payload.visit(
-      []() -> Option<const Language::Model::Addressable&> { return {}; },
-      [](const Reference<Language::Model::Addressable>& selected)
-          -> Option<const Language::Model::Addressable&> {
+      []() -> Option<const Language::Model::Memory&> { return {}; },
+      [](const Reference<Language::Model::Memory>& selected)
+          -> Option<const Language::Model::Memory&> {
         return selected.get();
       });
 }

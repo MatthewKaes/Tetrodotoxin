@@ -9,12 +9,14 @@
 #include "perimortem/system/version.hpp"
 
 #include "tetrodotoxin/language/visibility.hpp"
+#include "tetrodotoxin/source/declaration.hpp"
 #include "ttx/concept/abstract.hpp"
-#include "ttx/concept/bound.hpp"
+#include "ttx/concept/domain.hpp"
 #include "ttx/concept/reference.hpp"
 #include "ttx/lexical/anchor.hpp"
 #include "ttx/lexical/cursor.hpp"
 #include "ttx/model/type.hpp"
+#include "ttx/semantic/bound.hpp"
 
 namespace Tetrodotoxin::Language {
 
@@ -53,7 +55,7 @@ class Import : public Ttx::Concept::Abstract {
         -> Perimortem::Core::Option<Perimortem::Core::View::Bytes>;
   };
 
-  class Handle : public Ttx::Concept::Bound<Operations> {
+  class Handle : public Ttx::Semantic::Bound<Operations> {
    public:
     using Bound::Bound;
 
@@ -79,8 +81,8 @@ class Import : public Ttx::Concept::Abstract {
 
   auto bind_interface(Perimortem::System::Uuid requested) const
       -> Perimortem::Utility::Result<
-          Ttx::Concept::Binding,
-          Ttx::Concept::Binding::Failure> override;
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override;
 
   class Description {
    public:
@@ -206,6 +208,21 @@ class Import : public Ttx::Concept::Abstract {
   auto get_documentation() const -> const Ttx::Concept::Documentation& override;
 
  private:
+  friend class Tetrodotoxin::Source::Declaration;
+  auto complete_source(
+      Tetrodotoxin::Source::Declaration::Phase phase,
+      Ttx::Lexical::Cursor* cursor)
+      -> Tetrodotoxin::Source::Declaration::Completion {
+    using Phase = Tetrodotoxin::Source::Declaration::Phase;
+    if (phase == Phase::Type) {
+      return validate(*cursor);
+    }
+    if (phase == Phase::RestoredType) {
+      return validate_restored();
+    }
+    return True;
+  }
+
   auto select_target(Perimortem::Core::Option<Ttx::Lexical::Cursor&> cursor)
       const -> const Ttx::Concept::Abstract&;
 
@@ -224,6 +241,16 @@ class Import : public Ttx::Concept::Abstract {
   Ttx::Lexical::Anchor route_anchor;
   Perimortem::Core::Option<Ttx::Concept::Reference<const Ttx::Model::Type>>
       acquired;
+
+  // An Import can preserve its boundary around a domain answer only after
+  // the selected provider agrees to supply that answer. Retaining the binding
+  // with its subject lets repeated calls use the same policy without another
+  // lookup or negotiation. The source transaction retains both providers.
+  struct DomainBinding {
+    Ttx::Concept::Abstract::Handle subject;
+    Ttx::Concept::Domain::Handle domain;
+  };
+  mutable Perimortem::Core::Option<DomainBinding> domain_binding;
 };
 
 }  // namespace Tetrodotoxin::Language

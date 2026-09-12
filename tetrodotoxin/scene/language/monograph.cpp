@@ -3,7 +3,7 @@
 
 #include "tetrodotoxin/scene/language/monograph.hpp"
 
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "ttx/concept/none.hpp"
 #include "ttx/concept/unknown.hpp"
 

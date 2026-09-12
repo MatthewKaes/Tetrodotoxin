@@ -22,7 +22,7 @@ auto Builtin::Object::Access::create(
 auto Builtin::Object::Access::accepts_receiver(
     const Abstract& receiver,
     const Abstract& host) const -> Bool {
-  auto addressable = receiver.resolve().select<Language::Model::Addressable>();
+  auto addressable = receiver.resolve().select<Language::Model::Memory>();
   auto access_scope = host.resolve().select<Language::Model::Type>();
   return addressable && access_scope &&
          addressable->permits_write_from(*access_scope);

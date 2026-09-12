@@ -15,6 +15,36 @@ cc_library(
     includes = ["."],
 )
 
+# These assertions exercise ownership during constant evaluation. A small
+# compile target keeps their diagnostics independent of the language migration.
+cc_library(
+    name = "const_tests",
+    testonly = True,
+    srcs = glob(["unit_tests/perimortem/memory/const/*.cpp"]),
+    deps = ["//perimortem:memory"],
+)
+
+# Keep the allocation and container regressions runnable while the language
+# layers are being migrated. These are the same cases used by the full suite.
+cc_binary(
+    name = "foundation_tests",
+    testonly = True,
+    srcs = [
+        "unit_test.cpp",
+        "unit_tests/perimortem/core/sort.cpp",
+        "unit_tests/perimortem/graphics/png.cpp",
+        "unit_tests/perimortem/memory/arena.cpp",
+        "unit_tests/perimortem/memory/managed_map.cpp",
+        "unit_tests/perimortem/memory/vector.cpp",
+        "unit_tests/process/child.cpp",
+    ],
+    deps = [
+        ":process_fixture",
+        ":test_headers",
+        "//perimortem:headless",
+    ],
+)
+
 ttx_source(
     name = "runtime_package",
     src = "data/ttx/products/runtime/package.ttx",

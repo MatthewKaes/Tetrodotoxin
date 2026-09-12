@@ -20,6 +20,7 @@
 #include "tetrodotoxin/library/language/model/types/flag.hpp"
 #include "tetrodotoxin/library/language/model/types/signed.hpp"
 #include "tetrodotoxin/library/language/model/types/unsigned.hpp"
+#include "ttx/concept/domain.hpp"
 #include "ttx/concept/none.hpp"
 #include "ttx/concept/reference.hpp"
 #include "ttx/concept/unknown.hpp"
@@ -27,6 +28,7 @@
 
 using namespace Perimortem;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 using namespace Ttx::Lexical;
 using namespace Tetrodotoxin::Library;
 
@@ -83,6 +85,21 @@ auto Language::TypeReference::get_interface() const -> Abstract::Handle {
 
 auto Language::TypeReference::bind_interface(Perimortem::System::Uuid requested)
     const -> Perimortem::Utility::Result<Binding, Binding::Failure> {
+  if (requested == Domain::contract_id) {
+    if (subject == nullptr) {
+      return Binding::Failure::Pending;
+    }
+    if (!domain) {
+      Core::Option<Binding::Failure> failure;
+      subject->bind<Domain>().visit(
+          [&](const Domain::Handle& selected) { domain = selected; },
+          [&](Binding::Failure rejected) { failure = rejected; });
+      if (failure) {
+        return *failure;
+      }
+    }
+    return Domain::provide(*this);
+  }
   using Import = Tetrodotoxin::Language::Import;
   if (requested != Import::contract_id || !dependency) {
     if (!subject) {
@@ -129,6 +146,20 @@ auto Language::TypeReference::bind_interface(Perimortem::System::Uuid requested)
     },
   };
   return Binding::provide<Import>(this, operations);
+}
+
+auto Language::TypeReference::get_domain() const -> Domain::Answer {
+  return domain->get_domain().visit(
+      [&](Abstract::Handle selected) -> Domain::Answer {
+        // A self domain can keep this reference's dependency and access path.
+        // A provider that supplies another domain owns that returned edge,
+        // so its answer passes through without substituting our native Type.
+        return selected.get_identity() ==
+                       subject->get_interface().get_identity()
+                   ? get_interface()
+                   : selected;
+      },
+      [](Binding::Failure failure) -> Domain::Answer { return failure; });
 }
 
 auto Language::TypeReference::resolve_concept(Core::View::Bytes name) const

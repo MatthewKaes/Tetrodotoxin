@@ -9,10 +9,10 @@
 #include "tetrodotoxin/language/import.hpp"
 #include "tetrodotoxin/library/language/initialization.hpp"
 #include "tetrodotoxin/library/language/value.hpp"
-#include "ttx/concept/bound.hpp"
 #include "ttx/model/addressable.hpp"
 #include "ttx/model/callable.hpp"
 #include "ttx/model/type.hpp"
+#include "ttx/semantic/bound.hpp"
 
 namespace Tetrodotoxin::Library {
 
@@ -38,7 +38,7 @@ class Simulacra {
     0xb75c623dbd37ec5a,
   };
 
-  using Failure = Ttx::Concept::Binding::Failure;
+  using Failure = Ttx::Semantic::Binding::Failure;
 
   static auto project(Ttx::Concept::Abstract::Handle source)
       -> Perimortem::Utility::Result<Simulacra, Failure>;
@@ -86,7 +86,7 @@ class Simulacra {
         -> Perimortem::Utility::Result<Simulacra, Failure>;
   };
 
-  class Handle : public Ttx::Concept::Bound<Operations> {
+  class Handle : public Ttx::Semantic::Bound<Operations> {
    public:
     using Bound::Bound;
 

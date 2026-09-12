@@ -5,8 +5,8 @@
 
 #include "perimortem/system/uuid.hpp"
 
-#include "ttx/concept/bound.hpp"
 #include "ttx/model/type.hpp"
+#include "ttx/semantic/bound.hpp"
 
 namespace Ttx::Model {
 
@@ -29,7 +29,7 @@ class Addressable : public Concept::Abstract {
     auto (*get_type)(const void*) -> Concept::Abstract::Handle;
   };
 
-  class Handle : public Concept::Bound<Operations> {
+  class Handle : public Semantic::Bound<Operations> {
    public:
     using Bound::Bound;
 
@@ -42,7 +42,7 @@ class Addressable : public Concept::Abstract {
   };
 
   auto bind_interface(Perimortem::System::Uuid requested) const -> Perimortem::
-      Utility::Result<Concept::Binding, Concept::Binding::Failure> override {
+      Utility::Result<Semantic::Binding, Semantic::Binding::Failure> override {
     if (requested != Addressable::contract_id) {
       return Abstract::bind_interface(requested);
     }
@@ -53,7 +53,7 @@ class Addressable : public Concept::Abstract {
             .get_interface();
       },
     };
-    return Concept::Binding::provide<Addressable>(this, operations);
+    return Semantic::Binding::provide<Addressable>(this, operations);
   }
 
   virtual constexpr auto get_type() const

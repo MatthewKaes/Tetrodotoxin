@@ -5,7 +5,7 @@
 
 #include "perimortem/core/option.hpp"
 
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "ttx/model/callable.hpp"
 
 namespace Tetrodotoxin::Library::Language::Model {
@@ -15,6 +15,16 @@ namespace Tetrodotoxin::Library::Language::Model {
 class Callable : public Ttx::Model::Callable {
  public:
   TTX_CONTRACT(Callable, Ttx::Model::Callable);
+
+  auto bind_interface(Perimortem::System::Uuid requested) const
+      -> Perimortem::Utility::Result<
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override {
+    if (requested == Tetrodotoxin::Source::Declaration::contract_id) {
+      return Tetrodotoxin::Source::Declaration::provide(*this);
+    }
+    return Ttx::Model::Callable::bind_interface(requested);
+  }
 
   // A selected Self Callable may impose receiver authority beyond exact Type
   // binding. Ordinary invocations accept the resolved receiver unchanged.
@@ -107,6 +117,27 @@ class Callable : public Ttx::Model::Callable {
                    &*self == &*reference
                ? reference
                : Perimortem::Core::Option<const Ttx::Model::Addressable&>();
+  }
+
+ private:
+  friend class Tetrodotoxin::Source::Declaration;
+  auto complete_source(
+      Tetrodotoxin::Source::Declaration::Phase phase,
+      Ttx::Lexical::Cursor* cursor)
+      -> Tetrodotoxin::Source::Declaration::Completion {
+    using Phase = Tetrodotoxin::Source::Declaration::Phase;
+    switch (phase) {
+    case Phase::Signature:
+      return link_declaration_signature(*cursor);
+    case Phase::Body:
+      return link_declaration_body(*cursor);
+    case Phase::Finalize:
+      return finalize_declaration(*cursor);
+    case Phase::RestoredSignature:
+      return link_restored_declaration_signature();
+    default:
+      return True;
+    }
   }
 };
 

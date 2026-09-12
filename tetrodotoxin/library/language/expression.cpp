@@ -5,15 +5,53 @@
 
 #include "tetrodotoxin/library/language/constant.hpp"
 #include "tetrodotoxin/library/language/diagnostics.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "ttx/concept/constant.hpp"
+#include "ttx/concept/domain.hpp"
 #include "ttx/concept/none.hpp"
 #include "ttx/concept/reference.hpp"
 #include "ttx/model/layouts/fluid.hpp"
 
 using namespace Perimortem::Core;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 using namespace Tetrodotoxin::Library;
+
+auto Language::Expression::bind_interface(Perimortem::System::Uuid requested)
+    const -> Perimortem::Utility::Result<Binding, Binding::Failure> {
+  if (requested == Domain::contract_id) {
+    static const Domain::Operations operations = {
+      [](const void* source, ttx_abstract* output) -> ttx_binding_status {
+        const auto& expression = *static_cast<const Expression*>(source);
+        const Abstract& result = expression.get_result();
+        if (&result != &expression) {
+          return result.bind<Domain>().visit(
+              [&](const Domain::Handle& domain) -> ttx_binding_status {
+                return domain.get_domain().visit(
+                    [&](Abstract::Handle answer) -> ttx_binding_status {
+                      *output = answer.get_abi();
+                      return TTX_BINDING_SATISFIED;
+                    },
+                    [](Binding::Failure failure) -> ttx_binding_status {
+                      return static_cast<ttx_binding_status>(failure);
+                    });
+              },
+              [](Binding::Failure failure) -> ttx_binding_status {
+                return static_cast<ttx_binding_status>(failure);
+              });
+        }
+        const Abstract& type = expression.get_type();
+        if (&type == &Unknown::get_unknown()) {
+          return TTX_BINDING_PENDING;
+        }
+        *output = type.get_interface().get_abi();
+        return TTX_BINDING_SATISFIED;
+      },
+    };
+    return Binding::provide<Domain>(this, operations);
+  }
+  return Abstract::bind_interface(requested);
+}
 
 static auto select_output_type(const Abstract& candidate)
     -> Option<const Language::Model::Type&> {
@@ -276,8 +314,7 @@ auto Language::Expression::fold(Language::Model::Pack& pack) -> Perimortem::
 auto Language::Expression::get_write_type(
     const Language::Model::Type& access_scope) const
     -> Option<const Language::Model::Type&> {
-  auto addressable =
-      get_result().resolve().select<Language::Model::Addressable>();
+  auto addressable = get_result().resolve().select<Language::Model::Memory>();
   auto type = addressable
                   ? addressable->get_type().select<Language::Model::Type>()
                   : Option<const Language::Model::Type&>();
@@ -398,7 +435,7 @@ auto Language::Expression::evaluate() -> Perimortem::Utility::
         const_cast<Tetrodotoxin::Library::Language::Constant&>(*constant));
   }
 
-  auto addressable = result.resolve().select<Language::Model::Addressable>();
+  auto addressable = result.resolve().select<Language::Model::Memory>();
   return addressable ? addressable->get_constant()
                      : Option<Language::Model::Pack&>();
 }

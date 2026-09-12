@@ -15,6 +15,30 @@ using namespace Ttx::Lexical;
 using namespace Ttx::Model;
 using namespace Tetrodotoxin::Library;
 
+auto Language::Field::complete_source(
+    Tetrodotoxin::Source::Declaration::Phase phase,
+    Cursor* cursor) -> Tetrodotoxin::Source::Declaration::Completion {
+  using Phase = Tetrodotoxin::Source::Declaration::Phase;
+  switch (phase) {
+  case Phase::Type:
+    return link_declaration_type(*cursor);
+  case Phase::InferredType:
+    return link_inferred_declaration_type(*cursor);
+  case Phase::Initializer:
+    return link_declaration_initializer(*cursor);
+  case Phase::Constant:
+    return link_declaration_constant(*cursor);
+  case Phase::Finalize:
+    return finalize_declaration(*cursor);
+  case Phase::RestoredType:
+    return link_restored_declaration_type();
+  case Phase::RestoredInitializer:
+    return link_restored_declaration_initializer();
+  default:
+    return True;
+  }
+}
+
 auto Language::Field::create_authored(
     Allocator::Arena& domain,
     Tetrodotoxin::Language::Definition& definition,

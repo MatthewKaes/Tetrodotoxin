@@ -212,8 +212,8 @@ auto Tetrodotoxin::Library::Language::Types::Enumeration::link_types(
       domain, Builtin::Enum::Name::create(domain, *this, *name_type), True);
   auto& size = Builtin::Enum::Size::create(
       domain, *unsigned_count, source_cases.get_size());
-  generated_size = Option<Reference<const Model::Addressable>>(
-      Reference<const Model::Addressable>(size));
+  generated_size = Option<Reference<const Model::Memory>>(
+      Reference<const Model::Memory>(size));
 
   storage_type = Reference<const Model::Type>(*selected_type);
   stage = Stage::StorageLinked;
@@ -247,7 +247,7 @@ auto Types::Enumeration::link_restored_types() -> Bool {
       domain, Builtin::Enum::Name::create(domain, *this, *name_type), True);
   auto& size = Builtin::Enum::Size::create(
       domain, *unsigned_count, source_cases.get_size());
-  generated_size = Reference<const Model::Addressable>(size);
+  generated_size = Reference<const Model::Memory>(size);
   storage_type = Reference<const Model::Type>(*selected_type);
   stage = Stage::Finalized;
   return True;

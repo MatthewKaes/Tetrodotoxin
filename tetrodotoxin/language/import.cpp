@@ -3,6 +3,7 @@
 
 #include "tetrodotoxin/language/import.hpp"
 
+#include "ttx/concept/domain.hpp"
 #include "ttx/concept/none.hpp"
 #include "ttx/concept/unknown.hpp"
 #include "ttx/lexical/cursor.hpp"
@@ -10,6 +11,7 @@
 
 using namespace Perimortem::Core;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 using namespace Ttx::Lexical;
 using namespace Tetrodotoxin::Language;
 
@@ -41,6 +43,49 @@ static auto get_import_access(View::Bytes route, Count index)
 
 auto Import::bind_interface(Perimortem::System::Uuid requested) const
     -> Perimortem::Utility::Result<Binding, Binding::Failure> {
+  if (requested == Tetrodotoxin::Source::Declaration::contract_id) {
+    return Tetrodotoxin::Source::Declaration::provide(*this);
+  }
+  if (requested == Domain::contract_id) {
+    if (!domain_binding) {
+      const Abstract& selected = get_type();
+      if (selected.is<Unknown>()) {
+        return Binding::Failure::Pending;
+      }
+      if (selected.is<None>()) {
+        return Binding::Failure::Rejected;
+      }
+      Option<Binding::Failure> failure;
+      selected.bind<Domain>().visit(
+          [&](Domain::Handle domain) {
+            domain_binding = DomainBinding{selected.get_interface(), domain};
+          },
+          [&](Binding::Failure rejected) { failure = rejected; });
+      if (failure) {
+        return *failure;
+      }
+    }
+
+    static const Domain::Operations operations = {
+      [](const void* source, ttx_abstract* result) -> ttx_binding_status {
+        const auto& import = *static_cast<const Import*>(source);
+        const auto& selected = *import.domain_binding;
+        return selected.domain.get_domain().visit(
+            [&](Abstract::Handle answer) -> ttx_binding_status {
+              // A self domain keeps the import's authority. An independent
+              // domain edge belongs to the provider and passes through intact.
+              *result = answer.get_identity() == selected.subject.get_identity()
+                            ? import.get_interface().get_abi()
+                            : answer.get_abi();
+              return TTX_BINDING_SATISFIED;
+            },
+            [](Binding::Failure failure) -> ttx_binding_status {
+              return static_cast<ttx_binding_status>(failure);
+            });
+      },
+    };
+    return Binding::provide<Domain>(this, operations);
+  }
   if (requested != Import::contract_id) {
     const Abstract& selected = get_type();
     if (selected.is<Unknown>()) {

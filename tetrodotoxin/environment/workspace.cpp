@@ -13,13 +13,14 @@
 #include "tetrodotoxin/language/parser/comment.hpp"
 #include "tetrodotoxin/language/parser/dialect.hpp"
 #include "tetrodotoxin/language/parser/import.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
 #include "tetrodotoxin/library/language/model/callable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/type.hpp"
 #include "tetrodotoxin/package/content.hpp"
 #include "tetrodotoxin/package/dialect.hpp"
 #include "tetrodotoxin/package/resource.hpp"
 #include "tetrodotoxin/package/storage.hpp"
+#include "tetrodotoxin/source/declaration.hpp"
 #include "ttx/concept/unknown.hpp"
 #include "ttx/lexical/cursor.hpp"
 #include "ttx/lexical/tokenizer.hpp"
@@ -28,6 +29,7 @@ using namespace Perimortem::Core;
 using namespace Perimortem::Memory;
 using namespace Perimortem::System;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 using namespace Ttx::Lexical;
 using namespace Tetrodotoxin;
 
@@ -1093,28 +1095,11 @@ auto Environment::Workspace::get_associations(
 auto Environment::Workspace::find_authored_location(
     const Abstract& semantic) const -> Option<AuthoredLocation> {
   Option<Anchor> declaration;
-  semantic.visit<Library::Language::Model::Type>(
-      [&](const Library::Language::Model::Type& type) {
-        declaration = type.get_declaration_anchor();
+  semantic.bind<Tetrodotoxin::Source::Declaration>().visit(
+      [&](const Tetrodotoxin::Source::Declaration::Handle& source) {
+        declaration = source.get_anchor();
       },
-      [&](const Abstract& candidate) {
-        candidate.visit<Library::Language::Model::Addressable>(
-            [&](const Library::Language::Model::Addressable& addressable) {
-              declaration = addressable.get_declaration_anchor();
-            },
-            [&](const Abstract& callable_candidate) {
-              callable_candidate.visit<Library::Language::Model::Callable>(
-                  [&](const Library::Language::Model::Callable& callable) {
-                    declaration = callable.get_declaration_anchor();
-                  },
-                  [&](const Abstract& import_candidate) {
-                    auto import = import_candidate.select<Language::Import>();
-                    if (import) {
-                      declaration = import->get_declaration_anchor();
-                    }
-                  });
-            });
-      });
+      [](Binding::Failure) {});
 
   if (declaration) {
     Token focus = declaration->get_token();

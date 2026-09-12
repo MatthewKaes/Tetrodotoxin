@@ -85,7 +85,7 @@ class Alias : public Concept::Abstract {
 
   constexpr auto bind_interface(Perimortem::System::Uuid requested) const
       -> Perimortem::Utility::
-          Result<Concept::Binding, Concept::Binding::Failure> override {
+          Result<Semantic::Binding, Semantic::Binding::Failure> override {
     const Concept::Abstract& current = target.get();
     return current.bind_interface(requested);
   }

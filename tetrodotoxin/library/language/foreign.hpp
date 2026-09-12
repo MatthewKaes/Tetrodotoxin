@@ -12,10 +12,11 @@
 
 #include "tetrodotoxin/language/definition.hpp"
 #include "tetrodotoxin/library/language/access/static.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
 #include "tetrodotoxin/library/language/model/callable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/signature.hpp"
 #include "tetrodotoxin/library/language/type_reference.hpp"
+#include "tetrodotoxin/source/declaration.hpp"
 #include "ttx/concept/abstract.hpp"
 #include "ttx/concept/reference.hpp"
 #include "ttx/concept/unknown.hpp"
@@ -41,14 +42,17 @@ class Foreign final : public Ttx::Concept::Abstract {
 
   // State is one external data declaration. Its Definition is hosted by the
   // Foreign context while its delayed Type route falls through to the Source.
-  class State final : public Model::Addressable {
+  class State final : public Model::Memory {
    public:
-    TTX_CONTRACT(State, Model::Addressable);
+    TTX_CONTRACT(State, Model::Memory);
 
     auto bind_interface(Perimortem::System::Uuid requested) const
         -> Perimortem::Utility::Result<
-            Ttx::Concept::Binding,
-            Ttx::Concept::Binding::Failure> override {
+            Ttx::Semantic::Binding,
+            Ttx::Semantic::Binding::Failure> override {
+      if (requested == Tetrodotoxin::Source::Declaration::contract_id) {
+        return Tetrodotoxin::Source::Declaration::provide(*this);
+      }
       if (requested == Tetrodotoxin::Language::Definition::contract_id) {
         return Tetrodotoxin::Language::Definition::provide(*this);
       }
@@ -59,10 +63,10 @@ class Foreign final : public Ttx::Concept::Abstract {
                 ->type_reference.get_interface();
           },
         };
-        return Ttx::Concept::Binding::provide<Ttx::Model::Addressable>(
+        return Ttx::Semantic::Binding::provide<Ttx::Model::Addressable>(
             this, operations);
       }
-      return Model::Addressable::bind_interface(requested);
+      return Model::Memory::bind_interface(requested);
     }
 
     auto get_symbol() const -> Perimortem::Core::View::Bytes {
@@ -88,7 +92,7 @@ class Foreign final : public Ttx::Concept::Abstract {
 
     auto link(Ttx::Lexical::Cursor& cursor) -> Bool;
 
-    auto link_restored_declaration_type() -> Bool override;
+    auto link_restored_declaration_type() -> Bool;
 
     TTX_DOCUMENTATION(get_definition().get_documentation());
     TTX_NAME(definition.get_name());
@@ -103,7 +107,7 @@ class Foreign final : public Ttx::Concept::Abstract {
     }
 
     constexpr auto get_declaration_anchor() const
-        -> Perimortem::Core::Option<Ttx::Lexical::Anchor> override {
+        -> Perimortem::Core::Option<Ttx::Lexical::Anchor> {
       return definition.get_declaration_anchor();
     }
 
@@ -126,6 +130,25 @@ class Foreign final : public Ttx::Concept::Abstract {
     }
 
    private:
+    friend class Tetrodotoxin::Source::Declaration;
+    auto get_domain() const -> Ttx::Concept::Domain::Answer override {
+      return type_reference.get_interface();
+    }
+
+    auto complete_source(
+        Tetrodotoxin::Source::Declaration::Phase phase,
+        Ttx::Lexical::Cursor* cursor)
+        -> Tetrodotoxin::Source::Declaration::Completion {
+      using Phase = Tetrodotoxin::Source::Declaration::Phase;
+      if (phase == Phase::Type) {
+        return link(*cursor);
+      }
+      if (phase == Phase::RestoredType) {
+        return link_restored_declaration_type();
+      }
+      return True;
+    }
+
     constexpr State(
         Tetrodotoxin::Language::Definition& definition,
         TypeReference type_reference,
@@ -146,8 +169,8 @@ class Foreign final : public Ttx::Concept::Abstract {
 
     auto bind_interface(Perimortem::System::Uuid requested) const
         -> Perimortem::Utility::Result<
-            Ttx::Concept::Binding,
-            Ttx::Concept::Binding::Failure> override {
+            Ttx::Semantic::Binding,
+            Ttx::Semantic::Binding::Failure> override {
       if (requested == Tetrodotoxin::Language::Definition::contract_id) {
         return Tetrodotoxin::Language::Definition::provide(*this);
       }

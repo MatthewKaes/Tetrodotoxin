@@ -8,7 +8,7 @@
 #include "perimortem/system/uuid.hpp"
 
 #include "ttx/concept/abstract.hpp"
-#include "ttx/concept/bound.hpp"
+#include "ttx/semantic/bound.hpp"
 
 namespace Tetrodotoxin::Library::Language {
 
@@ -35,7 +35,7 @@ class Value {
     auto (*get_byte_stride)(const void*) -> Count;
   };
 
-  class Handle : public Ttx::Concept::Bound<Operations> {
+  class Handle : public Ttx::Semantic::Bound<Operations> {
    public:
     using Bound::Bound;
 
@@ -60,7 +60,7 @@ class Value {
   // their semantic operation. Taking the backing member's address instead
   // would bypass an implementation that computes or overrides that answer.
   template <typename Provider>
-  static auto scalar(const Provider& provider) -> Ttx::Concept::Binding {
+  static auto scalar(const Provider& provider) -> Ttx::Semantic::Binding {
     using Scalar = decltype(provider.get_value());
     static_assert(
         __is_integral(Scalar) || __is_same(Scalar, Bool) ||
@@ -88,7 +88,7 @@ class Value {
         return sizeof(static_cast<const Provider*>(source)->get_value());
       },
     };
-    return Ttx::Concept::Binding::provide<Value>(&provider, operations);
+    return Ttx::Semantic::Binding::provide<Value>(&provider, operations);
   }
 };
 

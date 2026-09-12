@@ -9,7 +9,7 @@
 #include "perimortem/memory/managed/vector.hpp"
 
 #include "tetrodotoxin/language/definition.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/type.hpp"
 #include "tetrodotoxin/library/language/type_reference.hpp"
 #include "ttx/concept/reference.hpp"
@@ -46,8 +46,8 @@ class Enumeration : public Model::Type {
 
   auto bind_interface(Perimortem::System::Uuid requested) const
       -> Perimortem::Utility::Result<
-          Ttx::Concept::Binding,
-          Ttx::Concept::Binding::Failure> override {
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override {
     if (requested == Tetrodotoxin::Language::Definition::contract_id) {
       return Tetrodotoxin::Language::Definition::provide(*this);
     }
@@ -176,8 +176,8 @@ class Enumeration : public Model::Type {
     }
     auto bind_interface(Perimortem::System::Uuid requested) const
         -> Perimortem::Utility::Result<
-            Ttx::Concept::Binding,
-            Ttx::Concept::Binding::Failure> override {
+            Ttx::Semantic::Binding,
+            Ttx::Semantic::Binding::Failure> override {
       if (requested == Tetrodotoxin::Language::Definition::contract_id) {
         return Tetrodotoxin::Language::Definition::provide(*this);
       }
@@ -225,7 +225,7 @@ class Enumeration : public Model::Type {
   Perimortem::Memory::Managed::Vector<
       Ttx::Concept::Reference<const Ttx::Concept::Abstract>>
       cases;
-  Perimortem::Core::Option<Ttx::Concept::Reference<const Model::Addressable>>
+  Perimortem::Core::Option<Ttx::Concept::Reference<const Model::Memory>>
       generated_size;
   Stage stage = Stage::Authored;
 };

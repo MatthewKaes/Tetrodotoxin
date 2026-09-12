@@ -12,9 +12,11 @@ cc_library(
     srcs = glob(["**/*.cpp"]),
     hdrs = glob(["**/*.hpp"]),
     deps = [
+        "//tetrodotoxin/source",
         "//perimortem:headless",
         "//ttx:concept",
         "//ttx:lexical",
         "//ttx:model",
+        "//ttx:semantic",
     ],
 )

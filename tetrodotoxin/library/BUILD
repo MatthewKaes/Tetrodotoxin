@@ -22,9 +22,11 @@ cc_library(
     deps = [
         "//perimortem:headless",
         "//tetrodotoxin/language",
+        "//tetrodotoxin/source",
         "//ttx:concept",
         "//ttx:lexical",
         "//ttx:model",
+        "//ttx:semantic",
     ],
 )
 
@@ -57,6 +59,7 @@ cc_library(
         "//ttx:concept",
         "//ttx:lexical",
         "//ttx:model",
+        "//ttx:semantic",
     ],
 )
 

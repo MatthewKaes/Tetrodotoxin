@@ -7,6 +7,7 @@
 
 using namespace Perimortem::Memory;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 using namespace Ttx::Lexical;
 using namespace Tetrodotoxin::Render;
 

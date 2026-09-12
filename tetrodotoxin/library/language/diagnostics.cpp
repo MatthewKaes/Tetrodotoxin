@@ -3,7 +3,7 @@
 
 #include "tetrodotoxin/library/language/diagnostics.hpp"
 
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/type.hpp"
 #include "ttx/concept/unknown.hpp"
 

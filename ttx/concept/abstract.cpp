@@ -7,6 +7,7 @@
 #include "ttx/concept/unknown.hpp"
 
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 
 auto Abstract::get_interface() const -> Handle {
   static const Operations operations = {

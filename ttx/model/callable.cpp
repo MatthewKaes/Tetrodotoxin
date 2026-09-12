@@ -9,13 +9,13 @@ using namespace Ttx;
 
 auto Model::Callable::bind_interface(Perimortem::System::Uuid requested) const
     -> Perimortem::Utility::
-        Result<Concept::Binding, Concept::Binding::Failure> {
+        Result<Semantic::Binding, Semantic::Binding::Failure> {
   if (requested != Callable::contract_id) {
     return Abstract::bind_interface(requested);
   }
 
   if (resolve().is<Concept::Unknown>()) {
-    return Concept::Binding::Failure::Pending;
+    return Semantic::Binding::Failure::Pending;
   }
 
   static const Operations operations = {
@@ -30,5 +30,5 @@ auto Model::Callable::bind_interface(Perimortem::System::Uuid requested) const
           .get_interface();
     },
   };
-  return Concept::Binding::provide<Callable>(this, operations);
+  return Semantic::Binding::provide<Callable>(this, operations);
 }

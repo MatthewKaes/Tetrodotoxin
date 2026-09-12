@@ -6,7 +6,7 @@
 #include "perimortem/core/math.hpp"
 
 #include "tetrodotoxin/language/attribute.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/types/real.hpp"
 #include "tetrodotoxin/library/language/model/types/value.hpp"
 #include "tetrodotoxin/library/language/types/structure.hpp"

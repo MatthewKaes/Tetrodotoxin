@@ -11,7 +11,7 @@
 #include "tetrodotoxin/library/language/constant.hpp"
 #include "tetrodotoxin/library/language/expression.hpp"
 #include "tetrodotoxin/library/language/flow/block.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "ttx/concept/abstract.hpp"
 #include "ttx/concept/reference.hpp"
 #include "ttx/lexical/anchor.hpp"
@@ -36,20 +36,20 @@ class Match : public Ttx::Concept::Abstract {
    public:
     constexpr Pattern(
         Ttx::Concept::Abstract& context,
-        Model::Addressable& payload)
+        Model::Memory& payload)
         : context(context), payload(payload) {}
 
     constexpr auto get_context() const -> Ttx::Concept::Abstract& {
       return context.get();
     }
 
-    constexpr auto get_payload() const -> Model::Addressable& {
+    constexpr auto get_payload() const -> Model::Memory& {
       return payload.get();
     }
 
    private:
     Ttx::Concept::Reference<Ttx::Concept::Abstract> context;
-    Ttx::Concept::Reference<Model::Addressable> payload;
+    Ttx::Concept::Reference<Model::Memory> payload;
   };
 
  private:
@@ -57,7 +57,7 @@ class Match : public Ttx::Concept::Abstract {
     CaseKind kind;
     Perimortem::Core::Option<Ttx::Model::PackReference<Model::Pack>> value;
     Ttx::Concept::Reference<Block> body;
-    Perimortem::Core::Option<Ttx::Concept::Reference<Model::Addressable>>
+    Perimortem::Core::Option<Ttx::Concept::Reference<Model::Memory>>
         payload;
     Ttx::Lexical::Anchor anchor;
     Perimortem::Core::Option<Ttx::Concept::Reference<const Constant>> constant;
@@ -79,7 +79,7 @@ class Match : public Ttx::Concept::Abstract {
   auto retain_value_case(
       Model::Pack& value,
       Block& body,
-      Model::Addressable& payload,
+      Model::Memory& payload,
       Ttx::Lexical::Anchor anchor) -> void;
 
   auto retain_constant_case(
@@ -118,7 +118,7 @@ class Match : public Ttx::Concept::Abstract {
   auto get_case_kind(Count index) const -> Perimortem::Core::Option<CaseKind>;
 
   auto get_case_payload(Count index) const
-      -> Perimortem::Core::Option<const Model::Addressable&>;
+      -> Perimortem::Core::Option<const Model::Memory&>;
 
   auto get_case_body(Count index) const
       -> Perimortem::Core::Option<const Block&>;

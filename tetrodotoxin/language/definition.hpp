@@ -14,9 +14,9 @@
 #include "tetrodotoxin/language/attribute.hpp"
 #include "tetrodotoxin/language/visibility.hpp"
 #include "ttx/concept/abstract.hpp"
-#include "ttx/concept/bound.hpp"
 #include "ttx/lexical/anchor.hpp"
 #include "ttx/lexical/cursor.hpp"
+#include "ttx/semantic/bound.hpp"
 
 namespace Tetrodotoxin::Language {
 
@@ -48,7 +48,7 @@ class Definition {
         -> Perimortem::Core::Option<Perimortem::Core::View::Bytes>;
   };
 
-  class Handle : public Ttx::Concept::Bound<Operations> {
+  class Handle : public Ttx::Semantic::Bound<Operations> {
    public:
     using Bound::Bound;
 
@@ -87,7 +87,7 @@ class Definition {
   // supply the same operation table directly without owning a Definition or
   // implementing any of its authoring methods.
   template <typename Provider>
-  static auto provide(const Provider& provider) -> Ttx::Concept::Binding {
+  static auto provide(const Provider& provider) -> Ttx::Semantic::Binding {
     static const Operations operations = {
       [](const void* source) -> Perimortem::Core::View::Bytes {
         return static_cast<const Provider*>(source)
@@ -124,7 +124,7 @@ class Definition {
         return {};
       },
     };
-    return Ttx::Concept::Binding::provide<Definition>(&provider, operations);
+    return Ttx::Semantic::Binding::provide<Definition>(&provider, operations);
   }
 
   // Definition ordinarily consumes its own Attributes. An embedding

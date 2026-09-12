@@ -35,49 +35,14 @@ cc_library(
 )
 
 cc_library(
-    name = "abi_core",
-    srcs = glob(["abi/core/*.cpp"]) + ["abi/log.cpp"],
-    hdrs = glob(["abi/core/*.hpp"]),
+    name = "abi",
+    srcs = glob(["abi/**/*.cpp"]),
+    hdrs = glob(["abi/**/*.hpp"]),
     copts = ["-Wreturn-type-c-linkage"],
     includes = ["."],
     deps = [
-        ":core",
-    ],
-)
-
-cc_library(
-    name = "abi_memory",
-    hdrs = glob(["abi/memory/**/*.hpp"]),
-    includes = ["."],
-    deps = [
-        ":core",
-        ":memory",
-    ],
-)
-
-cc_library(
-    name = "abi_graphics",
-    srcs = glob(["abi/graphics/**/*.cpp"]),
-    hdrs = [],
-    copts = ["-Wreturn-type-c-linkage"],
-    includes = ["."],
-    deps = [
-        ":abi_core",
         ":core",
         ":graphics",
-    ],
-)
-
-cc_library(
-    name = "abi_system",
-    srcs = glob(["abi/system/*.cpp"]),
-    hdrs = glob(["abi/system/*.hpp"]),
-    copts = ["-Wreturn-type-c-linkage"],
-    includes = ["."],
-    deps = [
-        ":abi_core",
-        ":abi_memory",
-        ":core",
         ":math",
         ":memory",
         ":system",
@@ -85,45 +50,11 @@ cc_library(
 )
 
 cc_library(
-    name = "abi",
-    deps = [
-        ":abi_core",
-        ":abi_graphics",
-        ":abi_memory",
-        ":abi_system",
-    ],
-)
-
-cc_library(
     name = "core",
-    srcs = [
-        "core/algorithm/search.cpp",
-        "core/bibliotheca.cpp",
-        "core/diagnostics/log.cpp",
-        "core/diagnostics/source.cpp",
-        "core/implementation.cpp",
-        "core/object.cpp",
-        "core/reader/binary.cpp",
-        "core/reader/serial.cpp",
-        "core/reader/textual.cpp",
-        "core/thread/worker.cpp",
-        "core/time.cpp",
-        "core/writer/binary.cpp",
-        "core/writer/serial.cpp",
-        "core/writer/textual.cpp",
-    ],
+    srcs = glob(["core/**/*.cpp"]),
     hdrs = glob([
-        "core/access/*.hpp",
-        "core/static/*.hpp",
-        "core/view/*.hpp",
-        "core/view/*.h",
-        "core/algorithm/*.hpp",
-        "core/reader/*.hpp",
-        "core/writer/*.hpp",
-        "core/diagnostics/*.hpp",
-        "core/thread/*.hpp",
-        "core/*.hpp",
-        "core/*.h",
+        "core/**/*.hpp",
+        "core/**/*.h",
     ]),
     includes = ["."],
 )
@@ -183,17 +114,12 @@ cc_library(
 cc_library(
     name = "system",
     srcs = glob([
-        "system/*.cpp",
+        "system/**/*.cpp",
     ]),
-    hdrs = glob(
-        [
-            "system/*.hpp",
-            "system/*.h",
-        ],
-        exclude = [
-            "system/window.hpp",
-        ],
-    ),
+    hdrs = glob([
+        "system/**/*.hpp",
+        "system/**/*.h",
+    ]),
     includes = ["."],
     linkopts = ["-lpthread"],
     deps = [
@@ -236,10 +162,10 @@ cc_library(
 cc_library(
     name = "platform",
     srcs = glob([
-        "system/platform/wayland/*.cpp",
+        "platform/**/*.cpp",
     ]),
-    hdrs = ["system/window.hpp"] + glob([
-        "system/platform/wayland/*.hpp",
+    hdrs = glob([
+        "platform/**/*.hpp",
     ]),
     includes = ["."],
     linkopts = ["-lwayland-client"],

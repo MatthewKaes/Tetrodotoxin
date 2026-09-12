@@ -19,8 +19,8 @@ class Flag : public Tetrodotoxin::Library::Language::Constant {
 
   auto bind_interface(Perimortem::System::Uuid requested) const
       -> Perimortem::Utility::Result<
-          Ttx::Concept::Binding,
-          Ttx::Concept::Binding::Failure> override {
+          Ttx::Semantic::Binding,
+          Ttx::Semantic::Binding::Failure> override {
     using Contract = Tetrodotoxin::Library::Language::Value;
     if (requested == Contract::contract_id) {
       return Contract::scalar(*this);

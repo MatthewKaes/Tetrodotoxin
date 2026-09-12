@@ -12,10 +12,41 @@
 
 using namespace Perimortem;
 using namespace Ttx::Concept;
+using Ttx::Semantic::Binding;
 using namespace Tetrodotoxin::Library;
+
+auto Language::Model::Type::complete_source(
+    Tetrodotoxin::Source::Declaration::Phase phase,
+    Ttx::Lexical::Cursor* cursor)
+    -> Tetrodotoxin::Source::Declaration::Completion {
+  using Phase = Tetrodotoxin::Source::Declaration::Phase;
+  switch (phase) {
+  case Phase::Type:
+    return link_types(*cursor);
+  case Phase::Initializer:
+    return link_initializers(*cursor);
+  case Phase::Signature:
+    return link_callable_signatures(*cursor);
+  case Phase::Body:
+    return link_callable_bodies(*cursor);
+  case Phase::Finalize:
+    return finalize(*cursor);
+  case Phase::RestoredType:
+    return link_restored_types();
+  case Phase::RestoredInitializer:
+    return link_restored_initializers();
+  case Phase::RestoredSignature:
+    return link_restored_callable_signatures();
+  default:
+    return True;
+  }
+}
 
 auto Language::Model::Type::bind_interface(Perimortem::System::Uuid requested)
     const -> Perimortem::Utility::Result<Binding, Binding::Failure> {
+  if (requested == Tetrodotoxin::Source::Declaration::contract_id) {
+    return Tetrodotoxin::Source::Declaration::provide(*this);
+  }
   if (requested != Language::Initialization::contract_id) {
     return Ttx::Model::Type::bind_interface(requested);
   }
@@ -24,8 +55,8 @@ auto Language::Model::Type::bind_interface(Perimortem::System::Uuid requested)
   }
 
   static const Language::Initialization::Operations operations = {
-    [](const void* source,
-       Memory::Allocator::Arena& arena) -> Language::Initialization::Answer {
+    [](const void* source, Perimortem::Memory::Allocator::Arena& arena)
+        -> Language::Initialization::Answer {
       const auto& type = *static_cast<const Type*>(source);
       auto produced = type.create_default(arena);
       if (!produced) {
@@ -55,12 +86,12 @@ auto Language::Model::Type::bind_interface(Perimortem::System::Uuid requested)
   return Binding::provide<Language::Initialization>(this, operations);
 }
 
-Language::Model::Type::Type(Memory::Allocator::Arena& domain) {
+Language::Model::Type::Type(Perimortem::Memory::Allocator::Arena& domain) {
   initialize_authorities(domain);
 }
 
 auto Language::Model::Type::initialize_authorities(
-    Memory::Allocator::Arena& domain) -> void {
+    Perimortem::Memory::Allocator::Arena& domain) -> void {
   if (static_authority) {
     return;
   }
@@ -157,7 +188,7 @@ auto Language::Model::Type::can_publish_callable(
 }
 
 auto Language::Model::Type::publish_callable(
-    Memory::Allocator::Arena& domain,
+    Perimortem::Memory::Allocator::Arena& domain,
     Abstract& callable,
     Bool published) -> void {
   if (!can_publish_callable(callable)) {
@@ -167,8 +198,10 @@ auto Language::Model::Type::publish_callable(
 
   if (!callables) {
     initialize_authorities(domain);
-    callables = Memory::Managed::Vector<Reference<Abstract>>(domain);
-    published_callables = Memory::Managed::Vector<Reference<Abstract>>(domain);
+    callables =
+        Perimortem::Memory::Managed::Vector<Reference<Abstract>>(domain);
+    published_callables =
+        Perimortem::Memory::Managed::Vector<Reference<Abstract>>(domain);
   }
 
   auto selected = callable.select<Language::Model::Callable>();

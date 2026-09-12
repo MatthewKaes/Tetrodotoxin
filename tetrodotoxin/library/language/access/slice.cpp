@@ -8,7 +8,7 @@
 #include "tetrodotoxin/library/language/constants/bytes.hpp"
 #include "tetrodotoxin/library/language/constants/signed.hpp"
 #include "tetrodotoxin/library/language/constants/unsigned.hpp"
-#include "tetrodotoxin/library/language/model/addressable.hpp"
+#include "tetrodotoxin/library/language/model/memory.hpp"
 #include "tetrodotoxin/library/language/model/types/signed.hpp"
 #include "tetrodotoxin/library/language/model/types/unsigned.hpp"
 #include "tetrodotoxin/library/language/types/contiguous.hpp"
@@ -185,9 +185,9 @@ static auto select_required_type(const Abstract& candidate)
   }
 
   const Abstract& resolved = candidate.resolve();
-  auto addressable = candidate.select<Language::Model::Addressable>();
+  auto addressable = candidate.select<Language::Model::Memory>();
   if (!addressable) {
-    addressable = resolved.select<Language::Model::Addressable>();
+    addressable = resolved.select<Language::Model::Memory>();
   }
   const Abstract& selected = addressable ? addressable->get_type() : resolved;
   direct = selected.select<Language::Model::Type>();
