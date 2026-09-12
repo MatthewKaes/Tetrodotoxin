@@ -38,7 +38,6 @@ class Table {
     }
   }
 
- public:
   static consteval auto required_storage() -> Count {
     Count buckets[max_length()] = {0};
     for (Count i = 0; i < get_source_count(); i++) {
@@ -75,8 +74,8 @@ class Table {
   static constexpr Count storage_size = required_storage();
   static constexpr Count max_range = max_length();
 
-  struct PackedBuffer {
-    consteval PackedBuffer() {
+  struct Storage {
+    consteval Storage() {
       // Caculate the bytes required for each bucket
       Count buckets[max_length()] = {0};
       for (Count i = 0; i < get_source_count(); i++) {
@@ -127,7 +126,7 @@ class Table {
     Core::Static::Vector<value_type, get_source_count()> mappings = {};
   };
 
-  static constexpr PackedBuffer byte_pack;
+  static constexpr Storage byte_pack;
 
   static constexpr auto find_or_null(const Core::View::Bytes key)
       -> const value_type* {

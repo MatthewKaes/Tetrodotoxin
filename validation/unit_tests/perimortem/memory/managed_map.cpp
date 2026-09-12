@@ -114,6 +114,36 @@ PERIMORTEM_UNIT_TEST(ManagedMap, clear) {
   EXPECT_EQ(values[1], 4);
 }
 
+PERIMORTEM_UNIT_TEST(ManagedMap, independent_copy) {
+  Allocator::Arena arena;
+  Managed::Map<S32, S32> source(arena);
+  source.insert(1, 2);
+  source.insert(3, 4);
+
+  auto copy = source;
+  copy.insert(1, 9);
+  copy.insert(5, 6);
+  EXPECT_EQ(source.get_size(), Count(2));
+  EXPECT_EQ(source[1], 2);
+  EXPECT(!source.contains(5));
+
+  copy.clear();
+  EXPECT(copy.is_empty());
+  EXPECT_EQ(source.get_size(), Count(2));
+  EXPECT(source.contains(1));
+  EXPECT(source.contains(3));
+}
+
+PERIMORTEM_UNIT_TEST(ManagedMap, empty_copy) {
+  Allocator::Arena arena;
+  Managed::Map<S32, S32> source(arena);
+  auto copy = source;
+  copy.insert(1, 2);
+
+  EXPECT(source.is_empty());
+  EXPECT_EQ(copy.get_size(), Count(1));
+}
+
 PERIMORTEM_UNIT_TEST(ManagedMap, insert_stress_test) {
   Allocator::Arena arena;
   Managed::Map<S32, S32> values(arena);

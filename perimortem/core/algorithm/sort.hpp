@@ -87,7 +87,7 @@ constexpr auto sort(Core::Access::Vector<type> access)
   auto heap_sort = [&heapify_max](type* partition, Count size) -> void {
     // Heapify the partition.
     for (Count i = size / 2; i > 0; i--) {
-      heapify_max(partition, i - 1, size);
+      heapify_max(partition, size, i - 1);
     }
 
     // Perform the actual heap sort.

@@ -96,6 +96,37 @@ PERIMORTEM_UNIT_TEST(AlgoSort, large_sort) {
   }
 }
 
+PERIMORTEM_UNIT_TEST(AlgoSort, heap_fallback) {
+  struct Counted {
+    Count value;
+    Count* comparisons;
+
+    auto operator>(const Counted& other) const -> Bool {
+      ++*comparisons;
+      return value > other.value;
+    }
+  };
+
+  Static::Vector<Counted, 32768> storage;
+  auto measure = [&](Count size) {
+    Count comparisons = 0;
+    for (Count i = 0; i < size; ++i) {
+      storage[i] = {i < size / 2 ? i : size - i, &comparisons};
+    }
+
+    Algorithm::sort(Access::Vector<Counted>(storage.get_data(), size));
+    for (Count i = 0; i < size; ++i) {
+      EXPECT_EQ(storage[i].value, (i + 1) / 2);
+    }
+
+    return comparisons;
+  };
+
+  const Count smaller = measure(16384);
+  const Count larger = measure(32768);
+  EXPECT(larger < 3 * smaller);
+}
+
 PERIMORTEM_UNIT_TEST(AlgoSort, dynamic_types) {
   constexpr auto item_count = 37;
   SortBytes test[item_count] = {};

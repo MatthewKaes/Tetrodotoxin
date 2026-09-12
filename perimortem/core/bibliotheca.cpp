@@ -61,9 +61,9 @@ class alignas(64) Slab {
       mapped_memory = mmap(nullptr, size, page_access, page_flags, -1, 0);
 
       // Check if a regular mmap also failed with regular 4kb pages.
-      if (mapped_memory == MAP_FAILED) {
-        // TODO: Diagnostics
-        return nullptr;
+      if (mapped_memory == MAP_FAILED) [[unlikely]] {
+        Diagnostics::Log::fatal(
+            "Unable to map a new slab of memory for the runtime."_view);
       }
     }
 
@@ -73,6 +73,8 @@ class alignas(64) Slab {
     slab->bump_ptr = sizeof(Slab);
     return slab;
 #else
+    Diagnostics::Log::fatal(
+        "Bibliotheca is unable to allocate memory from this system."_view);
     return nullptr;
 #endif
   }
@@ -81,7 +83,8 @@ class alignas(64) Slab {
 #ifdef PERI_LINUX
     auto success = munmap(slab, slab->mapped_size);
     if (success != 0) {
-      // TODO: Diagnostics
+      Diagnostics::Log::error(
+          "Bibliotheca failed to unmap a memory slab."_view);
       return False;
     }
 

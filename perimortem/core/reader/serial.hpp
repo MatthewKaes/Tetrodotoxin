@@ -67,7 +67,8 @@ class Serial {
   };
 
   constexpr Serial(View::Bytes source) : source(source) {}
-  constexpr Serial(const Serial& rhs) : source(rhs.source) {}
+  constexpr Serial(const Serial& rhs)
+      : source(rhs.source), cursor(rhs.cursor) {}
 
   // Sets the location of the read cursor.
   //

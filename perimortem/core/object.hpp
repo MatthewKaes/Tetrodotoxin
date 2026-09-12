@@ -10,12 +10,12 @@
 
 namespace Perimortem::Core {
 
-// Object<void> is the erased one word carrier shared by C++ and generated
-// code. It deliberately performs no automatic lifetime work because compiler
-// output places retain and release at its semantic value boundaries.
 template <typename value_type = void>
 class Object;
 
+// Object<void> is the erased one word carrier shared by C++ and generated
+// code. It deliberately performs no automatic lifetime work because compiler
+// output places retain and release at its semantic value boundaries.
 template <>
 class Object<void> {
  public:

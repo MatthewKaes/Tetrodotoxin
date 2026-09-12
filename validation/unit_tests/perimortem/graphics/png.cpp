@@ -67,6 +67,29 @@ PERIMORTEM_UNIT_TEST(GraphicsPng, checkerboard_2x2) {
   EXPECT_EQ(pixels.get_data()[3].alpha, U8(0xFF));
 }
 
+PERIMORTEM_UNIT_TEST(GraphicsPng, unaligned_input) {
+  auto source = File::read("validation/data/pngs/red_1x1.png"_view);
+  ASSERT(source);
+
+  // A PNG can arrive as a slice of another byte buffer. Move this fixture by
+  // one byte so its header and chunk integers cannot rely on native alignment.
+  // Sanitized builds must accept that input and still decode the same pixel.
+  Dynamic::Vector<U8> storage;
+  storage.resize(source->get_size() + 1);
+  Data::copy(
+      storage.get_data() + 1, source->get_view().get_data(), source->get_size());
+
+  const View::Bytes shifted(storage.get_data() + 1, source->get_size());
+  auto image = Formats::Png::decode(shifted);
+  const auto pixels = image.get_pixels();
+
+  ASSERT_EQ(pixels.get_size(), Count(1));
+  EXPECT_EQ(pixels[0].red, U8(0xFF));
+  EXPECT_EQ(pixels[0].green, U8(0));
+  EXPECT_EQ(pixels[0].blue, U8(0));
+  EXPECT_EQ(pixels[0].alpha, U8(0xFF));
+}
+
 PERIMORTEM_UNIT_TEST(GraphicsPng, decode_rgb_to_rgba) {
   auto source = File::read("validation/data/pngs/rgb_3x1.png"_view);
   ASSERT(source);

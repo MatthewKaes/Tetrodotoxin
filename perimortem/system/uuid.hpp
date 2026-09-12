@@ -81,6 +81,8 @@ class Uuid {
     }
   }
 
+  constexpr operator perimortem_uuid() const { return value; }
+
   constexpr auto operator==(const Uuid& rhs) const -> Bool {
     return value.high == rhs.value.high && value.low == rhs.value.low;
   }

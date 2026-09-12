@@ -20,23 +20,19 @@ class Vector {
   static constexpr Count growth_factor = 2;
 
   Vector() {};
-  Vector(const Vector& source_vector) {
-    ensure_capacity(source_vector.get_size());
-    size = source_vector.get_size();
+  Vector(const Vector& rhs) {
+    ensure_capacity(rhs.get_size());
+    size = rhs.get_size();
     for (Count i = 0; i < size; i++) {
       new (source_block + i, Core::Placement::Construct)
-          type(source_vector.source_block[i]);
+          type(rhs.source_block[i]);
     }
   }
 
-  Vector(Vector&& source_vector) {
-    size = source_vector.size;
-    capacity = source_vector.capacity;
-    source_block = source_vector.source_block;
-
-    source_vector.size = 0;
-    source_vector.capacity = 0;
-    source_vector.source_block = nullptr;
+  Vector(Vector&& rhs) {
+    Core::Data::swap(size, rhs.size);
+    Core::Data::swap(capacity, rhs.capacity);
+    Core::Data::swap(source_block, rhs.source_block);
   }
 
   Vector(Count capacity) {
@@ -44,30 +40,26 @@ class Vector {
     size = 0;
   }
 
-  auto operator=(Vector&& source_vector) -> Vector& {
-    size = source_vector.size;
-    capacity = source_vector.capacity;
-
-    source_vector.size = 0;
-    source_vector.capacity = 0;
-
+  auto operator=(Vector&& rhs) -> Vector& {
     // Swap source blocks. Since move is not destructive, the donor destructor
     // releases the old block this vector used to own.
-    Core::Data::swap(source_block, source_vector.source_block);
+    Core::Data::swap(size, rhs.size);
+    Core::Data::swap(capacity, rhs.capacity);
+    Core::Data::swap(source_block, rhs.source_block);
     return *this;
   }
 
-  auto operator=(const Vector& source_vector) -> Vector& {
-    if (this == &source_vector) {
+  auto operator=(const Vector& rhs) -> Vector& {
+    if (this == &rhs) {
       return *this;
     }
 
     clear();
-    ensure_capacity(source_vector.get_size());
-    size = source_vector.get_size();
+    ensure_capacity(rhs.get_size());
+    size = rhs.get_size();
     for (Count i = 0; i < size; i++) {
       new (source_block + i, Core::Placement::Construct)
-          type(source_vector.source_block[i]);
+          type(rhs.source_block[i]);
     }
 
     return *this;
@@ -149,10 +141,35 @@ class Vector {
   // Resizes the container but attempts to preserve as much of the original
   // buffer as will fit in the new size.
   //
-  // Shrinking the size of the buffer is nondestructive and can be recovered by
-  // resetting the size back to it's old value.
+  // Trivial values can be recovered by restoring the old size. Owning values
+  // are destroyed when removed and constructed again when the range grows.
   auto resize(Count new_size) -> void {
+    // Noop
+    if (new_size == size) {
+      return;
+    }
+
+    if (new_size < size) {
+      // If not trivially destructable then we need to destruct the values that
+      // are now outside of the range.
+      if constexpr (!__is_trivially_destructible(type)) {
+        for (Count i = new_size; i < size; i++) {
+          source_block[i].~type();
+        }
+      }
+
+      size = new_size;
+      return;
+    }
+
+    // If the size is larger check if we need to perform a growth opreation.
     ensure_capacity(new_size);
+    if constexpr (!__is_trivially_constructible(type)) {
+      for (Count i = size; i < new_size; i++) {
+        new (source_block + i, Core::Placement::Construct) type();
+      }
+    }
+
     size = new_size;
   }
 
@@ -162,7 +179,14 @@ class Vector {
   // Both growing and shrinking the buffer can be destructive operations so the
   // contents after a forgetful operation should always be assumed to be in an
   // invalid state.
-  auto forgetful_resize(Count required_size) -> void {
+  // Skipping element construction and destruction is only available when
+  // neither operation has work to perform. Compiler intrinsics establish
+  // that restriction without a runtime branch or additional headers.
+  auto forgetful_resize(Count required_size) -> void
+    requires(
+        __is_trivially_constructible(type) &&
+        __is_trivially_destructible(type))
+  {
     // Always set the size.
     size = required_size;
 
@@ -213,8 +237,8 @@ class Vector {
  private:
   auto destruct() -> void {
     // Look over all entries and destruct the keys and values.
-    for (Count bucket_index = 0; bucket_index < size; bucket_index++) {
-      source_block[bucket_index].~type();
+    for (Count i = 0; i < size; i++) {
+      source_block[i].~type();
     }
   }
 

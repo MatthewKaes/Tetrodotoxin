@@ -29,7 +29,12 @@ class Arena {
   static constexpr U64 arena_alignment = sizeof(Count);
 
   Arena();
-  Arena(Arena&&);
+
+  constexpr Arena(Arena&& arena) : rented_block(nullptr), usage(0) {
+    Perimortem::Core::Data::swap(rented_block, arena.rented_block);
+    Perimortem::Core::Data::swap(usage, arena.usage);
+  }
+
   ~Arena();
   Arena(const Arena&) = delete;
   auto operator=(const Arena&) -> Arena& = delete;

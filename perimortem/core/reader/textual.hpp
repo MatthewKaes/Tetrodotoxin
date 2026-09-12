@@ -18,7 +18,8 @@ namespace Perimortem::Core::Reader {
 class Textual {
  public:
   constexpr Textual(View::Bytes source) : source(source) {}
-  constexpr Textual(const Textual& rhs) : source(rhs.source) {}
+  constexpr Textual(const Textual& rhs)
+      : source(rhs.source), cursor(rhs.cursor) {}
 
   // Sets the location of the read cursor.
   //

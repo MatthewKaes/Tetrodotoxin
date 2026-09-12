@@ -20,7 +20,8 @@ template <Data::ByteOrder stream_endian>
 class Binary {
  public:
   constexpr Binary(View::Bytes source) : source(source) {}
-  constexpr Binary(const Binary& rhs) : source(rhs.source) {}
+  constexpr Binary(const Binary& rhs)
+      : source(rhs.source), cursor(rhs.cursor) {}
 
   // Sets the location of the read cursor.
   //

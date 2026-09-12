@@ -26,7 +26,23 @@ class Map {
   using Entry = Utility::Pair<key_type, value_type>;
 
   constexpr Map(Allocator::Arena& arena) : arena(arena) {}
-  constexpr Map(const Map&) = default;
+
+  // A copy keeps the same allocation lifetime but has its own table. Sharing
+  // buckets while copying size would let clearing one map invalidate the
+  // other's entries without updating its bookkeeping.
+  Map(const Map& rhs) : arena(rhs.arena) {
+    if (rhs.is_empty()) {
+      return;
+    }
+
+    ensure_capacity(rhs.get_size());
+    for (Count i = 0; i < rhs.buffer.bucket_count; i++) {
+      if (rhs.buffer.bucket_buffer[i]) {
+        const auto& slot = rhs.buffer.slots_buffer[i];
+        emplace_hashed(slot.hash, slot.entry.key, slot.entry.value);
+      }
+    }
+  }
 
   auto ensure_capacity(Count items) -> void {
     if (buffer.bucket_buffer && items * 10 <= buffer.bucket_count * 9) {

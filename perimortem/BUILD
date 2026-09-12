@@ -151,16 +151,12 @@ cc_library(
     name = "memory",
     srcs = glob(
         [
-            "memory/allocator/*.cpp",
-            "memory/dynamic/*.cpp",
-            "memory/managed/*.cpp",
+            "memory/**/*.cpp",
         ],
         allow_empty = True,
     ),
     hdrs = glob([
-        "memory/allocator/*.hpp",
-        "memory/dynamic/*.hpp",
-        "memory/managed/*.hpp",
+        "memory/**/*.hpp",
     ]),
     includes = ["."],
     deps = [
@@ -172,12 +168,10 @@ cc_library(
 cc_library(
     name = "compression",
     srcs = glob([
-        "compression/*.cpp",
-        "compression/bit_stream/*.cpp",
+        "compression/**/*.cpp",
     ]),
     hdrs = glob([
-        "compression/*.hpp",
-        "compression/bit_stream/*.hpp",
+        "compression/**/*.hpp",
     ]),
     includes = ["."],
     deps = [

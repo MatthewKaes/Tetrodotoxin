@@ -15,11 +15,6 @@ Allocator::Arena::Arena() {
   fetch_page(page_size);
 }
 
-Allocator::Arena::Arena(Arena&& arena) {
-  rented_block = arena.rented_block;
-  arena.rented_block = nullptr;
-}
-
 Allocator::Arena::~Arena() {
   while (rented_block != nullptr) {
     auto rented = rented_block;

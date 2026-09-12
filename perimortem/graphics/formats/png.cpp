@@ -165,9 +165,11 @@ constexpr auto read_chunk(View::Bytes source, Count offset) -> Chunk {
     return Chunk();
   }
 
-  U32 length =
-      Data::ensure_endian<Data::ByteOrder::Big, Data::ByteOrder::Native>(
-          *Data::cast<U32>(source.get_data() + offset));
+  U32 length;
+  Data::copy(
+      Data::cast<U8>(&length), source.get_data() + offset, sizeof(length));
+  length = Data::ensure_endian<Data::ByteOrder::Big, Data::ByteOrder::Native>(
+      length);
   if (offset + chunk_metadata_size + length > source.get_size()) [[unlikely]] {
     Diagnostics::Log::Message<128> error_message(
         Diagnostics::Log::Level::Error);
@@ -185,9 +187,13 @@ constexpr auto read_chunk(View::Bytes source, Count offset) -> Chunk {
   // release builds removing the CRC check improves throughput by as much as
   // 20% for large images.
 #if PERI_DEBUG
-  U32 stored_crc =
+  U32 stored_crc;
+  Data::copy(
+      Data::cast<U8>(&stored_crc), source.get_data() + offset + 8 + length,
+      sizeof(stored_crc));
+  stored_crc =
       Data::ensure_endian<Data::ByteOrder::Big, Data::ByteOrder::Native>(
-          *Data::cast<U32>(source.get_data() + offset + 8 + length));
+          stored_crc);
   U32 actual_crc = calculate_crc32(source.slice(offset + 4, 4 + length));
   if (stored_crc != actual_crc) [[unlikely]] {
     Diagnostics::Log::Message<96> error_message(Diagnostics::Log::Level::Error);
@@ -599,7 +605,7 @@ constexpr auto convert_to_pixels(
   }
 
   Count pixel_count = width * height;
-  output.forgetful_resize(pixel_count);
+  output.resize(pixel_count);
   auto data = raw_pixels.get_data();
   for (Count pixel_index = 0; pixel_index < pixel_count; pixel_index++) {
     Count source_offset = pixel_index * source_channels;
@@ -673,13 +679,14 @@ constexpr auto read_header(const View::Bytes source) -> ImageInfo {
     return ImageInfo();
   }
 
-  // Read the image info.
-  auto image_info = *Data::cast<const ImageInfo>(
-      source
-          .slice(
-              png_signature.get_size() + sizeof(U32) + header_tag.get_size(),
-              ImageInfo::size)
-          .get_data());
+  // The wire header can start at any byte address. Copy its 13 bytes into
+  // aligned storage without reading the native structure's trailing padding.
+  ImageInfo image_info;
+  Data::copy(
+      Data::cast<U8>(&image_info),
+      source.get_data() + png_signature.get_size() + sizeof(U32) +
+          header_tag.get_size(),
+      ImageInfo::size);
 
   // Currently only support 8 bit color depth
   if (image_info.get_bit_depth() != Image::get_color_depth()) [[unlikely]] {
@@ -727,7 +734,7 @@ constexpr auto process_data(
   // in place which saves a copy.
   if (info.get_color_type() == ColorType::Rgba) {
     Dynamic::Vector<Pixel> pixels;
-    pixels.forgetful_resize(info.get_width() * info.get_height());
+    pixels.resize(info.get_width() * info.get_height());
     if (!reconstruct_filter(
             filtered_rows.get_view(), info.get_width(), info.get_height(),
             bytes_per_pixel, pixels.get_access().get_bytes())) [[unlikely]] {
