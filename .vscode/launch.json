@@ -6,7 +6,7 @@
       "type": "lldb",
       "request": "launch",
       "terminal": "integrated",
-      "program": "${workspaceFolder}/.bin/bin/validation/unit_tests/ttx/data/flow_tests",
+      "program": "${workspaceFolder}/.bin/bin/validation/unit_tests/ttx/semantic/flow_tests",
       "args": [],
       "cwd": "${workspaceFolder}",
       "sourceMap": {

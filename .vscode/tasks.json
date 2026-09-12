@@ -9,7 +9,7 @@
       "command": "bazel",
       "args": [
         "build",
-        "//validation/unit_tests/ttx/data:flow_tests",
+        "//validation/unit_tests/ttx/semantic:flow_tests",
         "--config=debug"
       ],
       "options": {
